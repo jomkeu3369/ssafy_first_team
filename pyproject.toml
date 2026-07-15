@@ -1,18 +1,22 @@
 [project]
 name = "backend"
 version = "0.1.0"
-description = "Add your description here"
+description = "FastAPI backend and MCP-based RAG agent for LocalHub"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "aiosqlite>=0.22.1",
     "alembic>=1.18.5",
+    "faiss-cpu>=1.14.3",
     "fastapi>=0.139.0",
     "langchain>=1.3.13",
-    "langchain-chroma>=1.1.0",
+    "langchain-mcp-adapters>=0.3.0",
     "langchain-openai>=1.3.5",
     "langgraph>=1.2.9",
     "langsmith>=0.10.3",
+    "mcp[cli]>=1.28.1",
+    "numpy>=2.5.1",
+    "openai>=2.45.0",
     "pydantic-settings>=2.14.2",
     "python-dotenv>=1.2.2",
     "rich>=15.0.0",

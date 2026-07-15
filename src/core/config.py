@@ -8,21 +8,25 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATABASE_PATH = PROJECT_ROOT / "data" / "localhub.db"
+DEFAULT_FAISS_INDEX_PATH = PROJECT_ROOT / "data" / "faiss"
 
 
 class Settings(BaseSettings):
     environment: str = "development"
     version: str = "0.1.0"
 
-    database_url: str = (
-        f"sqlite+aiosqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
-    )
+    database_url: str = f"sqlite+aiosqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
     database_echo: bool = False
 
+    openai_api_key: str | None = None
+    openai_model: str | None = None
+    openai_embedding_model: str = "text-embedding-3-small"
+    web_search_model: str | None = None
+    faiss_index_dir: Path = DEFAULT_FAISS_INDEX_PATH
+    agent_recursion_limit: int = 8
+
     frontend_origins: str = (
-        "http://127.0.0.1:5500,"
-        "http://localhost:5500,"
-        "http://localhost:5173"
+        "http://127.0.0.1:5500,http://localhost:5500,http://localhost:5173"
     )
     cors_allow_credentials: bool = False
 
@@ -54,6 +58,10 @@ class Settings(BaseSettings):
             msg = "CORS credentials cannot be enabled with a wildcard origin"
             raise ValueError(msg)
         return self
+
+    @property
+    def effective_web_search_model(self) -> str | None:
+        return self.web_search_model or self.openai_model
 
 
 @lru_cache

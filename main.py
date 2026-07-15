@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from src.agent.router import router as chat_router
+from src.agent.service import AgentService
 from src.core.config import get_settings
 from src.core.database import dispose_engine, engine
 from src.core.logging import get_logger
@@ -18,16 +20,24 @@ logger = get_logger()
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    logger.info("Busan LocalHub 서버 시작 중...")
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    logger.info("Busan LocalHub server is starting")
+    agent_service = AgentService(settings)
+    app.state.agent_service = agent_service
 
     try:
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
+        try:
+            await agent_service.start()
+            logger.info("AI agent and MCP sessions are ready")
+        except Exception as exc:
+            logger.warning("AI agent is unavailable: %s", exc)
         yield
     finally:
+        await agent_service.close()
         await dispose_engine()
-        logger.info("Busan LocalHub 서버 종료")
+        logger.info("Busan LocalHub server has stopped")
 
 
 def configure_middleware(app: FastAPI) -> None:
@@ -37,44 +47,25 @@ def configure_middleware(app: FastAPI) -> None:
             allow_origins=settings.cors_origins,
             allow_credentials=settings.cors_allow_credentials,
             allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-            allow_headers=[
-                "Accept",
-                "Authorization",
-                "Content-Type",
-                "X-Client-Id",
-            ],
+            allow_headers=["Accept", "Authorization", "Content-Type", "X-Client-Id"],
             expose_headers=["X-Request-ID"],
             max_age=3600,
         )
 
     @app.middleware("http")
     async def logging_middleware(request: Request, call_next):
-        should_skip_logging = request.url.path in {
-            "/health",
-            "/version",
-            "/favicon.ico",
-        }
-        if should_skip_logging:
+        if request.url.path in {"/health", "/version", "/favicon.ico"}:
             return await call_next(request)
 
         request_id = str(uuid4())
         request.state.request_id = request_id
         started_at = time.perf_counter()
-        logger.info(
-            "START: %s %s [%s]",
-            request.method,
-            request.url.path,
-            request_id,
-        )
-
+        logger.info("START: %s %s [%s]", request.method, request.url.path, request_id)
         try:
             response = await call_next(request)
         except Exception:
             logger.exception(
-                "FAIL: %s %s [%s]",
-                request.method,
-                request.url.path,
-                request_id,
+                "FAIL: %s %s [%s]", request.method, request.url.path, request_id
             )
             raise
 
@@ -106,11 +97,9 @@ def register_routes(app: FastAPI) -> None:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Database connection failed",
             ) from exc
-
         return {"status": "healthy", "database": "connected"}
 
-    # Register completed routers here, for example:
-    # app.include_router(chat_router, prefix="/api", tags=["AI"])
+    app.include_router(chat_router, prefix="/api", tags=["AI"])
 
 
 def create_app() -> FastAPI:
@@ -121,14 +110,10 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         openapi_url="/openapi.json" if settings.enable_openapi else None,
         docs_url=(
-            "/docs"
-            if settings.enable_openapi and settings.enable_swagger_ui
-            else None
+            "/docs" if settings.enable_openapi and settings.enable_swagger_ui else None
         ),
         redoc_url=(
-            "/redoc"
-            if settings.enable_openapi and settings.enable_redoc
-            else None
+            "/redoc" if settings.enable_openapi and settings.enable_redoc else None
         ),
     )
     configure_middleware(app)

@@ -9,8 +9,7 @@ from src.core.config import get_settings
 
 RICH_FORMAT = "[%(filename)s:%(lineno)s] >> %(message)s"
 FILE_HANDLER_FORMAT = (
-    "[%(asctime)s] %(levelname)s "
-    "[%(filename)s:%(funcName)s:%(lineno)s] >> %(message)s"
+    "[%(asctime)s] %(levelname)s [%(filename)s:%(funcName)s:%(lineno)s] >> %(message)s"
 )
 LOGGER_NAME = "localhub"
 

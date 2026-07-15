@@ -30,6 +30,12 @@ def test_cors_preflight() -> None:
         )
 
     assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == (
-        "http://localhost:5173"
-    )
+    assert response.headers["access-control-allow-origin"] == ("http://localhost:5173")
+
+
+def test_chat_is_unavailable_without_agent_configuration() -> None:
+    with TestClient(app) as client:
+        client.app.state.agent_service = None
+        response = client.post("/api/chat", json={"message": "안녕하세요"})
+
+    assert response.status_code == 503
