@@ -62,7 +62,7 @@ def configure_middleware(app: FastAPI) -> None:
             allow_origins=settings.cors_origins,
             allow_credentials=settings.cors_allow_credentials,
             allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-            allow_headers=["Accept", "Authorization", "Content-Type", "X-Client-Id", "X-Import-Key"],
+            allow_headers=["Accept", "Authorization", "Content-Type", "X-Client-Id", "X-Session-Id", "X-Import-Key"],
             expose_headers=["X-Request-ID"],
             max_age=3600,
         )

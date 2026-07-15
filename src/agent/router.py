@@ -13,7 +13,7 @@ logger = get_logger()
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(payload: ChatRequest, request: Request, client_id: Annotated[UUID, Header(alias="X-Client-Id")]) -> ChatResponse:
+async def chat(payload: ChatRequest, request: Request, client_id: Annotated[UUID, Header(alias="X-Client-Id")], session_id: Annotated[UUID, Header(alias="X-Session-Id")]) -> ChatResponse:
     service: AgentService | None = getattr(request.app.state, "agent_service", None)
     
     if service is None or not service.is_ready:
@@ -22,7 +22,7 @@ async def chat(payload: ChatRequest, request: Request, client_id: Annotated[UUID
             detail="AI agent is not configured. Set OPENAI_API_KEY and OPENAI_MODEL."
         )
     try:
-        return await service.chat(payload, str(client_id))
+        return await service.chat(payload, str(client_id), str(session_id))
     except Exception as exc:
         request_id = getattr(request.state, "request_id", "unknown")
         logger.exception("AI agent request failed [%s]", request_id)

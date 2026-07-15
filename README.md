@@ -80,7 +80,9 @@ uv run python scripts/build_faiss_index.py
 
 ## API
 
-`POST /api/v1/chat` (`X-Client-Id` UUID 헤더 필수)
+`POST /api/v1/chat` (`X-Client-Id`, `X-Session-Id` UUID 헤더 필수)
+
+`X-Client-Id`는 브라우저를 식별하는 안정적인 익명 UUID로 유지하고, `X-Session-Id`는 새 채팅을 시작할 때마다 새 UUID를 생성합니다. 같은 두 값을 보내는 요청만 이전 대화 메모리를 이어가며, 어느 하나라도 다르면 별도 대화로 격리됩니다. LangSmith에는 두 값을 조합해 해시한 `thread_id`만 기록합니다.
 
 ```json
 {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import sys
 from contextlib import AsyncExitStack
@@ -39,10 +40,7 @@ class AgentService:
             msg = "OPENAI_API_KEY and OPENAI_MODEL must be configured"
             raise RuntimeError(msg)
 
-        connections = {
-            "local": self._stdio_connection("src.mcp_servers.local_search"),
-            "web": self._stdio_connection("src.mcp_servers.web_search"),
-        }
+        connections = self._mcp_connections()
         client = MultiServerMCPClient(connections)
         stack = AsyncExitStack()
         try:
@@ -80,10 +78,11 @@ class AgentService:
             await asyncio.to_thread(self._langsmith_client.close, timeout=5)
             self._langsmith_client = None
 
-    async def chat(self, request: ChatRequest, thread_id: str) -> ChatResponse:
+    async def chat(self, request: ChatRequest, client_id: str, session_id: str) -> ChatResponse:
         if not self.is_ready:
             raise RuntimeError("Agent is not ready")
 
+        thread_id = self.conversation_thread_id(client_id, session_id)
         config = {"recursion_limit": self.settings.agent_recursion_limit, "configurable": {"thread_id": thread_id}}
         state = await self._agent.aget_state(config)
         messages: list[HumanMessage | AIMessage | SystemMessage] = []
@@ -100,7 +99,7 @@ class AgentService:
             enabled=self._langsmith_client is not None,
             client=self._langsmith_client,
             project_name=self.settings.langsmith_project,
-            metadata={"language": request.language},
+            metadata={"language": request.language, "thread_id": thread_id}
         ):
             result = await self._agent.ainvoke(
                 {"messages": messages},
@@ -123,12 +122,28 @@ class AgentService:
         )
 
     @staticmethod
-    def _stdio_connection(module: str) -> dict[str, Any]:
+    def conversation_thread_id(client_id: str, session_id: str) -> str:
+        return hashlib.sha256(f"{client_id}:{session_id}".encode()).hexdigest()
+
+    def _mcp_connections(self) -> dict[str, dict[str, Any]]:
+        local_environment = {"DATABASE_URL": self.settings.database_url, "OPENAI_EMBEDDING_MODEL": self.settings.openai_embedding_model, "FAISS_INDEX_DIR": str(self.settings.faiss_index_dir)}
+        if self.settings.openai_api_key:
+            local_environment["OPENAI_API_KEY"] = self.settings.openai_api_key
+
+        web_environment = {}
+        if self.settings.tavily_api_key:
+            web_environment["TAVILY_API_KEY"] = self.settings.tavily_api_key
+
+        return {"local": self._stdio_connection("src.mcp_servers.local_search", local_environment), "web": self._stdio_connection("src.mcp_servers.web_search", web_environment)}
+
+    @staticmethod
+    def _stdio_connection(module: str, environment: dict[str, str]) -> dict[str, Any]:
         return {
             "transport": "stdio",
             "command": sys.executable,
             "args": ["-m", module],
             "cwd": str(PROJECT_ROOT),
+            "env": environment
         }
 
     @staticmethod

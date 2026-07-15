@@ -37,7 +37,7 @@ def test_cors_preflight() -> None:
             headers={
                 "Origin": "http://localhost:5173",
                 "Access-Control-Request-Method": "GET",
-                "Access-Control-Request-Headers": "X-Client-Id",
+                "Access-Control-Request-Headers": "X-Client-Id,X-Session-Id",
             },
         )
 
@@ -48,6 +48,13 @@ def test_cors_preflight() -> None:
 def test_chat_is_unavailable_without_agent_configuration() -> None:
     with TestClient(app) as client:
         client.app.state.agent_service = None
-        response = client.post("/api/v1/chat", headers={"X-Client-Id": str(uuid4())}, json={"message": "안녕하세요"})
+        response = client.post("/api/v1/chat", headers={"X-Client-Id": str(uuid4()), "X-Session-Id": str(uuid4())}, json={"message": "안녕하세요"})
 
     assert response.status_code == 503
+
+
+def test_chat_requires_a_separate_session_id() -> None:
+    with TestClient(app) as client:
+        response = client.post("/api/v1/chat", headers={"X-Client-Id": str(uuid4())}, json={"message": "안녕하세요"})
+
+    assert response.status_code == 422
