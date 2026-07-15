@@ -15,7 +15,6 @@ from src.api.media.router import router as media_router
 from src.api.realtime.manager import manager
 from src.api.realtime.router import router as realtime_router
 from src.api.tag.router import router as tag_router
-from src.api.tourism import router as tourism_router_module
 from src.api.tourism.router import router as tourism_router
 from src.api.tourism.service import get_festivals
 from src.core.database import get_db_session
@@ -128,14 +127,12 @@ def _write_tourism_files(data_dir: Path) -> None:
 @pytest.mark.asyncio
 async def test_tourism_list_detail_and_date_status(tmp_path: Path) -> None:
     _write_tourism_files(tmp_path)
-    original_data_dir = tourism_router_module.settings.tourism_data_dir
-    tourism_router_module.settings.tourism_data_dir = tmp_path
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:
-        session.add_all([Board(board_id=1, name="송도 해수욕장", category="관광지"), Board(board_id=2, name="부산 테스트 축제", category="축제공연행사")])
+        session.add_all([Board(board_id=1, name="송도 해수욕장", category="관광지", source_content_id="place-1", address="부산 서구", image="https://example.com/place.jpg"), Board(board_id=2, name="부산 테스트 축제", category="축제공연행사", source_content_id="festival-1", event_place="광안리", event_start_date="20260701", event_end_date="20260731", image="https://example.com/festival.jpg")])
         await session.commit()
     app = FastAPI()
     app.include_router(tourism_router, prefix="/api/v1")
@@ -147,14 +144,11 @@ async def test_tourism_list_detail_and_date_status(tmp_path: Path) -> None:
     app.dependency_overrides[get_db_session] = override_session
     transport = ASGITransport(app=app)
 
-    try:
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            attractions = await client.get("/api/v1/tourism/attractions")
-            attraction = await client.get("/api/v1/tourism/attractions/place-1")
-            festival = await client.get("/api/v1/tourism/festivals/festival-1")
-            missing = await client.get("/api/v1/tourism/attractions/missing")
-    finally:
-        tourism_router_module.settings.tourism_data_dir = original_data_dir
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        attractions = await client.get("/api/v1/tourism/attractions")
+        attraction = await client.get("/api/v1/tourism/attractions/place-1")
+        festival = await client.get("/api/v1/tourism/festivals/festival-1")
+        missing = await client.get("/api/v1/tourism/attractions/missing")
 
     assert attractions.status_code == 200
     assert attractions.json()["total"] == 1

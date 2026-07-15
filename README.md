@@ -117,9 +117,9 @@ Render 환경 변수에 충분히 긴 임의 문자열을 등록합니다.
 DATA_IMPORT_API_KEY=replace-with-a-long-random-secret
 ```
 
-Swagger의 `POST /api/v1/admin/data-import/boards`에서 `부산_*.json` 파일들을 한 번에 선택하고 `X-Import-Key` 헤더에 같은 값을 전달합니다. 가져오기 API는 각 항목의 `firstimage` 또는 `firstimage2`를 `Board.image`에 저장합니다. 동일한 이름과 카테고리는 다시 삽입하지 않으며, 기존 설명과 이미지 주소도 갱신하려면 `updateExisting=true`를 사용합니다.
+Swagger의 `POST /api/v1/admin/data-import/boards`에서 `부산_*.json` 파일들을 한 번에 선택하고 `X-Import-Key` 헤더에 같은 값을 전달합니다. 가져오기 API는 각 항목의 이미지 주소, 관광 콘텐츠 ID, 주소, 축제 기간과 장소를 `Board`에 저장합니다. 이후 관광지·축제 GET API는 JSON 파일이 아니라 이 DB 데이터를 직접 조회합니다. 동일한 이름과 카테고리는 다시 삽입하지 않으며, 기존 행의 관광 필드까지 보강하려면 `updateExisting=true`를 사용합니다.
 
-마이그레이션을 수동으로 진행하는 환경에서는 배포 전에 `Board` 테이블에 nullable 이미지 컬럼을 추가해야 합니다.
+마이그레이션을 수동으로 진행하는 환경에서는 배포 전에 `Board` 테이블에 nullable `image`, `contentId`, `address`, `eventStartDate`, `eventEndDate`, `eventPlace` 컬럼을 추가해야 합니다. SQLite는 서버 시작 시 누락된 컬럼을 호환성 처리로 자동 추가합니다.
 
 ```sql
 ALTER TABLE "Board" ADD COLUMN image VARCHAR(2000) NULL;
@@ -139,7 +139,7 @@ curl.exe -X POST "https://YOUR-SERVICE.onrender.com/api/v1/admin/data-import/boa
 
 챗봇은 로컬 SQL 및 문서 검색 결과가 없거나 질문의 일부만 답할 수 있을 정도로 부족하면 별도 확인 없이 Tavily 웹 검색을 자동 실행합니다.
 
-보드·관광지·축제·태그 응답은 `nameEn`을 포함하며 유형별로 `descriptionEn`, `summaryEn`, `categoryEn`, `addressEn`, `placeEn`, `periodEn`을 제공합니다. 영문 원본이 없는 고유명사와 주소는 한국어 원문을 폴백으로 사용합니다. 관광지와 축제 응답의 `boardId`는 같은 이름과 카테고리로 가져온 커뮤니티 보드를 가리킵니다.
+보드·관광지·축제·태그 응답은 `nameEn`을 포함하며 유형별로 `descriptionEn`, `summaryEn`, `categoryEn`, `addressEn`, `placeEn`, `periodEn`을 제공합니다. 영문 원본이 없는 고유명사와 주소는 한국어 원문을 폴백으로 사용합니다. 관광지와 축제 응답의 `boardId`는 가져오기 API가 생성하거나 갱신한 같은 Board 행을 가리킵니다.
 
 `GET /api/v1/posts/popular?page=1&size=10`은 모든 게시판의 게시글을 좋아요·댓글·조회 수 순으로 통합 조회합니다.
 

@@ -19,7 +19,7 @@ async def test_sqlite_foreign_keys_are_enabled() -> None:
 
 
 @pytest.mark.asyncio
-async def test_database_compatibility_adds_board_image_column_once() -> None:
+async def test_database_compatibility_adds_board_tourism_columns_once() -> None:
     target_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with target_engine.begin() as connection:
         await connection.execute(text('CREATE TABLE "Board" ("boardId" BIGINT PRIMARY KEY, name VARCHAR NOT NULL, category VARCHAR NOT NULL, description VARCHAR)'))
@@ -29,7 +29,7 @@ async def test_database_compatibility_adds_board_image_column_once() -> None:
 
     async with target_engine.connect() as connection:
         columns = await connection.run_sync(_column_names)
-    assert "image" in columns
+    assert {"image", "contentId", "address", "eventStartDate", "eventEndDate", "eventPlace"} <= columns
     await target_engine.dispose()
 
 
@@ -44,7 +44,7 @@ async def test_database_compatibility_skips_missing_board_table() -> None:
 async def test_database_compatibility_keeps_normal_sequence_gaps() -> None:
     target_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with target_engine.begin() as connection:
-        await connection.execute(text('CREATE TABLE "Board" ("boardId" BIGINT PRIMARY KEY, name VARCHAR NOT NULL, category VARCHAR NOT NULL, description VARCHAR, image VARCHAR)'))
+        await connection.execute(text('CREATE TABLE "Board" ("boardId" BIGINT PRIMARY KEY, name VARCHAR NOT NULL, category VARCHAR NOT NULL, description VARCHAR, image VARCHAR, "contentId" VARCHAR, address VARCHAR, "eventStartDate" VARCHAR, "eventEndDate" VARCHAR, "eventPlace" VARCHAR)'))
         await connection.execute(text('INSERT INTO "Board" ("boardId", name, category) VALUES (1, \'첫 번째\', \'FREE\'), (3, \'세 번째\', \'FREE\')'))
 
     assert await ensure_database_compatibility(target_engine) is False

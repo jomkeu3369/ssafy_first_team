@@ -22,5 +22,10 @@ class Board(Base):
     category: Mapped[str] = mapped_column(String(50), nullable=False)
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     image: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    source_content_id: Mapped[str | None] = mapped_column("contentId", String(100), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    event_start_date: Mapped[str | None] = mapped_column("eventStartDate", String(8), nullable=True)
+    event_end_date: Mapped[str | None] = mapped_column("eventEndDate", String(8), nullable=True)
+    event_place: Mapped[str | None] = mapped_column("eventPlace", String(500), nullable=True)
 
     posts: Mapped[list[Post]] = relationship(back_populates="board")

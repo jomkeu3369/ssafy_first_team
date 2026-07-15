@@ -94,12 +94,16 @@ async def _normalize_sqlite_ids(connection) -> bool:
 async def _apply_compatibility_updates(connection, normalize_ids: bool) -> bool:
     changed = False
     columns = await connection.run_sync(_board_columns)
-    if columns is not None and "image" not in columns:
+    missing_columns = {"image": "VARCHAR(2000) NULL", "contentId": "VARCHAR(100) NULL", "address": "VARCHAR(500) NULL", "eventStartDate": "VARCHAR(8) NULL", "eventEndDate": "VARCHAR(8) NULL", "eventPlace": "VARCHAR(500) NULL"}
+    if columns is not None:
         preparer = connection.dialect.identifier_preparer
         table_name = preparer.quote("Board")
-        column_name = preparer.quote("image")
-        await connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} VARCHAR(2000) NULL"))
-        changed = True
+        for column, definition in missing_columns.items():
+            if column in columns:
+                continue
+            column_name = preparer.quote(column)
+            await connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}"))
+            changed = True
     if normalize_ids:
         changed |= await _normalize_sqlite_ids(connection)
     return changed

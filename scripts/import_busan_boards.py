@@ -27,6 +27,11 @@ class CleanBoard:
     category: str
     description: str | None
     image: str | None
+    source_content_id: str | None
+    address: str | None
+    event_start_date: str | None
+    event_end_date: str | None
+    event_place: str | None
 
 
 def clean_text(value: Any) -> str:
@@ -82,12 +87,18 @@ def load_boards(source_paths: list[Path]) -> tuple[list[CleanBoard], int]:
                 skipped += 1
                 continue
             seen.add(key)
+            address = " ".join(value for value in (clean_text(item.get("addr1")), clean_text(item.get("addr2"))) if value)[:500] or None
             boards.append(
                 CleanBoard(
                     name=name,
                     category=category,
                     description=build_description(item),
-                    image=clean_text(item.get("firstimage") or item.get("firstimage2"))[:2000] or None
+                    image=clean_text(item.get("firstimage") or item.get("firstimage2"))[:2000] or None,
+                    source_content_id=clean_text(item.get("contentid"))[:100] or None,
+                    address=address,
+                    event_start_date=clean_text(item.get("eventstartdate"))[:8] or None,
+                    event_end_date=clean_text(item.get("eventenddate"))[:8] or None,
+                    event_place=clean_text(item.get("eventplace"))[:500] or None
                 )
             )
 
@@ -117,15 +128,25 @@ async def import_boards(boards: list[CleanBoard], update_existing: bool) -> tupl
                     name=item.name,
                     category=item.category,
                     description=item.description,
-                    image=item.image
+                    image=item.image,
+                    source_content_id=item.source_content_id,
+                    address=item.address,
+                    event_start_date=item.event_start_date,
+                    event_end_date=item.event_end_date,
+                    event_place=item.event_place
                 )
                 session.add(row)
                 existing[(item.name, item.category)] = row
                 next_id += 1
                 inserted += 1
-            elif update_existing and (row.description != item.description or row.image != item.image):
+            elif update_existing and (row.description != item.description or row.image != item.image or row.source_content_id != item.source_content_id or row.address != item.address or row.event_start_date != item.event_start_date or row.event_end_date != item.event_end_date or row.event_place != item.event_place):
                 row.description = item.description
                 row.image = item.image
+                row.source_content_id = item.source_content_id
+                row.address = item.address
+                row.event_start_date = item.event_start_date
+                row.event_end_date = item.event_end_date
+                row.event_place = item.event_place
                 updated += 1
             else:
                 unchanged += 1

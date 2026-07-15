@@ -36,6 +36,11 @@ class CleanBoard:
     category: str
     description: str | None
     image: str | None
+    source_content_id: str | None
+    address: str | None
+    event_start_date: str | None
+    event_end_date: str | None
+    event_place: str | None
 
 
 _import_lock = asyncio.Lock()
@@ -91,7 +96,8 @@ async def clean_uploads(files: list[UploadFile]) -> tuple[list[CleanBoard], int,
                 continue
             seen.add(key)
             image = _clean_text(item.get("firstimage") or item.get("firstimage2"))[:2000] or None
-            boards.append(CleanBoard(name=name, category=category, description=_build_description(item), image=image))
+            address = " ".join(value for value in (_clean_text(item.get("addr1")), _clean_text(item.get("addr2"))) if value)[:500] or None
+            boards.append(CleanBoard(name=name, category=category, description=_build_description(item), image=image, source_content_id=_clean_text(item.get("contentid"))[:100] or None, address=address, event_start_date=_clean_text(item.get("eventstartdate"))[:8] or None, event_end_date=_clean_text(item.get("eventenddate"))[:8] or None, event_place=_clean_text(item.get("eventplace"))[:500] or None))
             categories[category] = categories.get(category, 0) + 1
     return boards, skipped, categories
 
@@ -111,7 +117,7 @@ async def import_boards(db: AsyncSession, files: list[UploadFile], update_existi
         for item in boards:
             row = existing.get((item.name, item.category))
             if row is None:
-                row = Board(board_id=next_board_id, name=item.name, category=item.category, description=item.description, image=item.image)
+                row = Board(board_id=next_board_id, name=item.name, category=item.category, description=item.description, image=item.image, source_content_id=item.source_content_id, address=item.address, event_start_date=item.event_start_date, event_end_date=item.event_end_date, event_place=item.event_place)
                 db.add(row)
                 existing[(item.name, item.category)] = row
                 occupied.add(next_board_id)
@@ -119,9 +125,14 @@ async def import_boards(db: AsyncSession, files: list[UploadFile], update_existi
                 while next_board_id in occupied:
                     next_board_id += 1
                 inserted += 1
-            elif update_existing and (row.description != item.description or row.image != item.image):
+            elif update_existing and (row.description != item.description or row.image != item.image or row.source_content_id != item.source_content_id or row.address != item.address or row.event_start_date != item.event_start_date or row.event_end_date != item.event_end_date or row.event_place != item.event_place):
                 row.description = item.description
                 row.image = item.image
+                row.source_content_id = item.source_content_id
+                row.address = item.address
+                row.event_start_date = item.event_start_date
+                row.event_end_date = item.event_end_date
+                row.event_place = item.event_place
                 updated += 1
             else:
                 unchanged += 1
