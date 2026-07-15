@@ -109,6 +109,20 @@ uv run python scripts/build_faiss_index.py
 
 도구가 실제로 반환한 로컬 레코드와 웹 URL만 `references`에 포함합니다.
 
+## 부산 JSON 데이터 업로드
+
+Render 환경 변수에 충분히 긴 임의 문자열을 등록합니다.
+
+```dotenv
+DATA_IMPORT_API_KEY=replace-with-a-long-random-secret
+```
+
+Swagger의 `POST /api/v1/admin/data-import/boards`에서 `부산_*.json` 파일들을 한 번에 선택하고 `X-Import-Key` 헤더에 같은 값을 전달합니다. 동일한 이름과 카테고리는 다시 삽입하지 않으며, 기존 설명도 갱신하려면 `updateExisting=true`를 사용합니다.
+
+```powershell
+curl.exe -X POST "https://YOUR-SERVICE.onrender.com/api/v1/admin/data-import/boards?updateExisting=true" -H "X-Import-Key: YOUR_SECRET" -F "files=@C:/Users/SSAFY/Desktop/data2/부산/부산_관광지.json" -F "files=@C:/Users/SSAFY/Desktop/data2/부산/부산_축제공연행사.json"
+```
+
 ## 개발 명령
 
 ```powershell

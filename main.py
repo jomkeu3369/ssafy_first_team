@@ -12,6 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from src.agent.router import router as chat_router
 from src.api.board.router import router as board_router
 from src.api.comment.router import router as comment_router
+from src.api.data_import.router import router as data_import_router
 from src.api.like.router import router as like_router
 from src.api.media.router import router as media_router
 from src.api.post.router import router as post_router
@@ -57,7 +58,7 @@ def configure_middleware(app: FastAPI) -> None:
             allow_origins=settings.cors_origins,
             allow_credentials=settings.cors_allow_credentials,
             allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-            allow_headers=["Accept", "Authorization", "Content-Type", "X-Client-Id"],
+            allow_headers=["Accept", "Authorization", "Content-Type", "X-Client-Id", "X-Import-Key"],
             expose_headers=["X-Request-ID"],
             max_age=3600,
         )
@@ -118,6 +119,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(media_router, prefix="/api/v1", tags=["Media"])
     app.include_router(tourism_router, prefix="/api/v1", tags=["Tourism"])
     app.include_router(realtime_router, prefix="/api/v1", tags=["Realtime"])
+    app.include_router(data_import_router, prefix="/api/v1", tags=["Admin Data Import"])
 
 
 def create_app() -> FastAPI:

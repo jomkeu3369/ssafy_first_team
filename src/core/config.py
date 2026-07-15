@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     faiss_index_dir: Path = DEFAULT_FAISS_INDEX_PATH
     media_dir: Path = DEFAULT_MEDIA_PATH
     tourism_data_dir: Path = DEFAULT_TOURISM_DATA_PATH
+    data_import_api_key: str | None = None
     agent_recursion_limit: int = 8
 
     langsmith_tracing: bool = False

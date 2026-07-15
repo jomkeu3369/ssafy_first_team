@@ -1,0 +1,84 @@
+import json
+
+import pytest
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from src.api.data_import import router as router_module
+from src.api.data_import.router import router
+from src.core.database import get_db_session
+from src.models import Base
+from src.models.board import Board
+
+
+async def _app_with_database():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+
+    async def override_session():
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_session
+    return app, engine, session_factory
+
+
+def _upload(name: str, category: str, address: str) -> tuple[str, tuple[str, bytes, str]]:
+    payload = {"contentType": category, "items": [{"title": name, "addr1": address}, {"title": name, "addr1": address}, {"title": ""}]}
+    return "files", (f"부산_{category}.json", json.dumps(payload, ensure_ascii=False).encode(), "application/json")
+
+
+@pytest.mark.asyncio
+async def test_protected_import_inserts_updates_and_skips_duplicates() -> None:
+    app, engine, session_factory = await _app_with_database()
+    original_key = router_module.settings.data_import_api_key
+    router_module.settings.data_import_api_key = "test-import-secret"
+    transport = ASGITransport(app=app)
+    headers = {"X-Import-Key": "test-import-secret"}
+    files = [_upload("해운대 해수욕장", "관광지", "부산 해운대구"), _upload("부산 불꽃축제", "축제공연행사", "부산 수영구")]
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            denied = await client.post("/api/v1/admin/data-import/boards", files=files)
+            inserted = await client.post("/api/v1/admin/data-import/boards", headers=headers, files=files)
+            unchanged = await client.post("/api/v1/admin/data-import/boards", headers=headers, files=files)
+            updated = await client.post("/api/v1/admin/data-import/boards", headers=headers, params={"updateExisting": "true"}, files=[_upload("해운대 해수욕장", "관광지", "부산 해운대구 우동")])
+    finally:
+        router_module.settings.data_import_api_key = original_key
+
+    assert denied.status_code == 401
+    assert inserted.status_code == 200
+    assert inserted.json() == {"sourceCount": 2, "insertedCount": 2, "updatedCount": 0, "unchangedCount": 0, "skippedCount": 4, "categories": {"관광지": 1, "축제공연행사": 1}}
+    assert unchanged.json()["insertedCount"] == 0
+    assert unchanged.json()["unchangedCount"] == 2
+    assert updated.json()["updatedCount"] == 1
+
+    async with session_factory() as session:
+        assert await session.scalar(select(func.count(Board.board_id))) == 2
+        board = (await session.scalars(select(Board).where(Board.name == "해운대 해수욕장"))).one()
+        assert board.description == "주소: 부산 해운대구 우동"
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_import_rejects_unknown_content_type() -> None:
+    app, engine, _session_factory = await _app_with_database()
+    original_key = router_module.settings.data_import_api_key
+    router_module.settings.data_import_api_key = "test-import-secret"
+    transport = ASGITransport(app=app)
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post("/api/v1/admin/data-import/boards", headers={"X-Import-Key": "test-import-secret"}, files=[_upload("잘못된 데이터", "UNKNOWN", "부산")])
+    finally:
+        router_module.settings.data_import_api_key = original_key
+
+    assert response.status_code == 400
+    assert response.json() == {"message": "부산 관광 JSON 형식이 올바르지 않습니다."}
+    await engine.dispose()
