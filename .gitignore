@@ -10,3 +10,4 @@ __pycache__/
 data/faiss/
 .uv-cache/
 logs/
+api_spac.md
