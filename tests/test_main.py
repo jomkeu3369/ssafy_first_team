@@ -35,14 +35,14 @@ def test_cors_preflight() -> None:
         response = client.options(
             "/health",
             headers={
-                "Origin": "http://localhost:5173",
+                "Origin": "https://saffybuffy.netlify.app",
                 "Access-Control-Request-Method": "GET",
                 "Access-Control-Request-Headers": "X-Client-Id,X-Session-Id",
             },
         )
 
     assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == ("http://localhost:5173")
+    assert response.headers["access-control-allow-origin"] == ("https://saffybuffy.netlify.app")
 
 
 def test_chat_is_unavailable_without_agent_configuration() -> None:

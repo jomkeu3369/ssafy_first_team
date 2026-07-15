@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     langsmith_project: str = "localhub-rag-agent"
 
     frontend_origins: str = (
-        "http://127.0.0.1:5500,http://localhost:5500,http://localhost:5173"
+        "https://saffybuffy.netlify.app"
     )
     cors_allow_credentials: bool = False
 
