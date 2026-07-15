@@ -1,6 +1,6 @@
 from collections.abc import AsyncGenerator
 
-from sqlalchemy import event
+from sqlalchemy import event, inspect, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -38,6 +38,27 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
     expire_on_commit=False,
 )
+
+
+def _board_columns(sync_connection) -> set[str] | None:
+    inspector = inspect(sync_connection)
+    if "Board" not in inspector.get_table_names():
+        return None
+    return {column["name"] for column in inspector.get_columns("Board")}
+
+
+async def ensure_database_compatibility(target_engine: AsyncEngine | None = None) -> bool:
+    selected_engine = target_engine or engine
+    async with selected_engine.begin() as connection:
+        columns = await connection.run_sync(_board_columns)
+        if columns is None or "image" in columns:
+            return False
+
+        preparer = connection.dialect.identifier_preparer
+        table_name = preparer.quote("Board")
+        column_name = preparer.quote("image")
+        await connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} VARCHAR(2000) NULL"))
+        return True
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
