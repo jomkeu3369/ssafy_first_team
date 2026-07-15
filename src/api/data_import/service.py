@@ -8,7 +8,9 @@ from fastapi import UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.data_import.schema import ImportResponse
+from src.api.data_import.schema import FaissIndexResponse, FaissIndexStatusResponse, ImportResponse
+from src.core.config import get_settings
+from src.mcp_servers.faiss_store import ensure_vector_store, vector_store_status
 from src.models.board import Board
 
 
@@ -44,6 +46,7 @@ class CleanBoard:
 
 
 _import_lock = asyncio.Lock()
+settings = get_settings()
 
 
 def _clean_text(value: Any) -> str:
@@ -138,3 +141,13 @@ async def import_boards(db: AsyncSession, files: list[UploadFile], update_existi
                 unchanged += 1
         await db.commit()
     return ImportResponse(source_count=len(files), inserted_count=inserted, updated_count=updated, unchanged_count=unchanged, skipped_count=skipped, categories=categories)
+
+
+async def rebuild_faiss_index() -> FaissIndexResponse:
+    bundle = await ensure_vector_store(force=True)
+    return FaissIndexResponse(indexed_count=len(bundle.documents), fingerprint=bundle.fingerprint, embedding_model=settings.openai_embedding_model, rebuilt=bundle.rebuilt)
+
+
+async def get_faiss_index_status() -> FaissIndexStatusResponse:
+    current = await vector_store_status()
+    return FaissIndexStatusResponse(ready=current.ready, stale=current.stale, document_count=current.document_count, indexed_count=current.indexed_count, fingerprint=current.fingerprint, embedding_model=current.embedding_model, built_at=current.built_at)

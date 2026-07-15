@@ -10,5 +10,22 @@ class ImportResponse(BaseModel):
     categories: dict[str, int]
 
 
+class FaissIndexResponse(BaseModel):
+    indexed_count: int = Field(serialization_alias="indexedCount")
+    fingerprint: str
+    embedding_model: str = Field(serialization_alias="embeddingModel")
+    rebuilt: bool
+
+
+class FaissIndexStatusResponse(BaseModel):
+    ready: bool
+    stale: bool
+    document_count: int = Field(serialization_alias="documentCount")
+    indexed_count: int = Field(serialization_alias="indexedCount")
+    fingerprint: str
+    embedding_model: str | None = Field(serialization_alias="embeddingModel")
+    built_at: str | None = Field(serialization_alias="builtAt")
+
+
 class ErrorResponse(BaseModel):
     message: str

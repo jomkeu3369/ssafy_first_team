@@ -54,29 +54,34 @@ LANGSMITH_PROJECT=localhub-rag-agent
 
 웹 검색은 Tavily Search API를 사용하며 `TAVILY_API_KEY`가 필요합니다. OpenAI 설정은 채팅 에이전트와 로컬 FAISS 임베딩에만 사용합니다. OpenAI 설정이 없더라도 서버와 `/health`는 시작되며 채팅 API만 503을 반환합니다.
 
-## FAISS 인덱스 만들기
+## FAISS 인덱스
 
-`data/faiss_documents.jsonl`을 UTF-8 JSON Lines 형식으로 준비합니다. 각 줄은 `content`가 필수이며 나머지는 출처 메타데이터입니다.
+FAISS 문서는 SQLite의 `Board`와 `post` 데이터로 자동 구성됩니다. 검색할 때 인덱스가 없거나 DB 지문이 기존 manifest와 다르면 OpenAI 임베딩을 사용해 자동 재구축합니다. 최초에는 전체 문서를 임베딩하고 이후에는 기존 벡터를 재사용해 추가·수정된 문서만 다시 임베딩합니다. 첫 검색은 오래 걸릴 수 있지만 이후 검색은 메모리와 `data/faiss` 인덱스를 재사용합니다.
 
-```json
-{"content":"광안리 해수욕장 소개와 이용 정보", "source_type":"regional_contents", "source_id":"42", "title":"광안리 해수욕장", "address":"부산광역시 수영구", "image_url":"https://example.com/image.jpg"}
+배포 직후 첫 사용자 요청 전에 미리 생성하려면 보호된 관리자 API를 호출합니다.
+
+```powershell
+curl.exe -X POST "https://YOUR-SERVICE.onrender.com/api/v1/admin/data-import/faiss" -H "X-Import-Key: YOUR_SECRET"
 ```
+
+`GET /api/v1/admin/data-import/faiss`에 같은 `X-Import-Key`를 보내면 현재 DB 문서 수, 인덱스 문서 수, `ready`, `stale`, 생성 시각을 확인할 수 있습니다.
+
+로컬에서는 다음 명령을 사용할 수 있습니다. `--force`를 추가하면 DB 지문이 같아도 다시 생성합니다.
 
 ```powershell
 uv run python scripts/build_faiss_index.py
 ```
 
-생성되는 `data/faiss/index.faiss`와 `documents.json`은 실행 산출물이므로 Git에서 제외합니다. LangChain의 폐기 예정 community 래퍼 대신 `faiss-cpu` API를 직접 사용하고, 임베딩과 에이전트 계층에는 LangChain을 사용합니다.
+생성되는 `data/faiss/index.faiss`, `documents.json`, `manifest.json`은 실행 산출물이므로 Git에서 제외합니다. Render의 기본 파일 시스템에서는 재배포 시 사라질 수 있지만 다음 FAISS 검색에서 자동 복구됩니다. `search_sqlite`는 정확 키워드 조회에, `search_faiss`는 의미 기반 검색에 사용되며 저장 데이터 질문에는 두 검색을 모두 실행합니다.
 
 ## SQLite 검색 계약
 
-보안을 위해 MCP 도구는 임의 SQL을 받지 않습니다. 아래 허용 테이블이 실제로 존재할 때만 조회하며, 존재하는 열 이름을 확인한 뒤 바인딩된 검색어와 지역 조건을 사용합니다.
+보안을 위해 MCP 도구는 임의 SQL을 받지 않습니다. 아래 허용 테이블이 실제로 존재할 때만 조회하며, 존재하는 열 이름을 확인한 뒤 바인딩된 검색어를 사용합니다.
 
-- `regional_contents`
-- `posts`
-- `qa_documents`
+- `Board`
+- `post`
 
-지원 열 후보는 `id/content_id`, `title/name/question`, `content/description/answer`, `address`, `image_url`, `region/district`입니다. 다른 팀원이 확정한 스키마가 이 이름과 다르면 `src/mcp_servers/local_search.py`의 `SEARCHABLE_TABLES` 매핑만 수정하면 됩니다.
+보드 이름·설명·주소와 게시글 제목·본문을 정확 키워드로 검색합니다. FAISS 인덱스에는 여기에 보드 카테고리, 축제 기간·장소, 게시글 태그까지 포함해 의미 기반 검색의 재현율을 보강합니다.
 
 ## API
 

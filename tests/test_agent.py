@@ -23,6 +23,7 @@ def test_system_prompt_contains_scope_gate() -> None:
     assert "you must automatically call" in SYSTEM_PROMPT
     assert "Do not ask the user for permission first" in SYSTEM_PROMPT
     assert "until web search has also been attempted" in SYSTEM_PROMPT
+    assert "always call search_faiss" in SYSTEM_PROMPT
 
 
 def test_mcp_connections_receive_only_required_environment() -> None:

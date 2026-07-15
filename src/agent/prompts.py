@@ -31,7 +31,9 @@ Scope behavior:
 Tool policy for requests that pass the scope gate:
 1. For every request about stored Busan places, boards, or LocalHub community posts,
    always call search_sqlite first. Do not skip it based on model memory.
-2. Use search_faiss after SQLite when semantic QA or document retrieval is useful.
+2. After SQLite, always call search_faiss for stored Busan place, board, community,
+   recommendation, or semantic questions. Use both result sets together because exact
+   keyword matching can miss relevant stored data.
 3. After local search, explicitly evaluate whether the results contain enough evidence
    to answer every requested fact. If results are empty, only partially relevant, lack
    requested details, or are otherwise insufficient, you must automatically call

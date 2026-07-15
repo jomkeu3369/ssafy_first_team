@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
@@ -7,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.api.data_import import router as router_module
+from src.api.data_import import service as import_service
 from src.api.data_import.router import router
 from src.api.tourism.router import router as tourism_router
 from src.core.database import get_db_session
@@ -110,4 +112,33 @@ async def test_import_rejects_unknown_content_type() -> None:
 
     assert response.status_code == 400
     assert response.json() == {"message": "부산 관광 JSON 형식이 올바르지 않습니다."}
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_protected_faiss_rebuild_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, engine, _session_factory = await _app_with_database()
+    monkeypatch.setattr(router_module.settings, "data_import_api_key", "test-import-secret")
+    monkeypatch.setattr(router_module.settings, "openai_api_key", "openai-test")
+
+    async def fake_rebuild():
+        return SimpleNamespace(indexed_count=1755, fingerprint="fingerprint", embedding_model="embedding-test", rebuilt=True)
+
+    async def fake_status():
+        return SimpleNamespace(ready=True, stale=False, document_count=1755, indexed_count=1755, fingerprint="fingerprint", embedding_model="embedding-test", built_at="2026-07-15T00:00:00+00:00")
+
+    monkeypatch.setattr(import_service, "rebuild_faiss_index", fake_rebuild)
+    monkeypatch.setattr(import_service, "get_faiss_index_status", fake_status)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        denied = await client.post("/api/v1/admin/data-import/faiss")
+        rebuilt = await client.post("/api/v1/admin/data-import/faiss", headers={"X-Import-Key": "test-import-secret"})
+        current = await client.get("/api/v1/admin/data-import/faiss", headers={"X-Import-Key": "test-import-secret"})
+
+    assert denied.status_code == 401
+    assert rebuilt.status_code == 200
+    assert rebuilt.json() == {"indexedCount": 1755, "fingerprint": "fingerprint", "embeddingModel": "embedding-test", "rebuilt": True}
+    assert current.json()["ready"] is True
+    assert current.json()["stale"] is False
+    assert current.json()["documentCount"] == 1755
     await engine.dispose()
