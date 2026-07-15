@@ -1,6 +1,16 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from main import app
+from src.agent.service import AgentService
+
+
+@pytest.fixture(autouse=True)
+def disable_real_agent_startup(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def skip_start(_service: AgentService) -> None:
+        return None
+
+    monkeypatch.setattr(AgentService, "start", skip_start)
 
 
 def test_health_and_documentation_settings() -> None:
