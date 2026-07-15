@@ -15,6 +15,7 @@ dependencies = [
     "langsmith>=0.10.3",
     "pydantic-settings>=2.14.2",
     "python-dotenv>=1.2.2",
+    "rich>=15.0.0",
     "sqlalchemy>=2.0.51",
     "uvicorn[standard]>=0.51.0",
 ]

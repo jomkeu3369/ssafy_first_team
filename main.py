@@ -1,54 +1,139 @@
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.config import get_settings
-from app.core.database import dispose_engine, engine
+from src.core.config import get_settings
+from src.core.database import dispose_engine, engine
+from src.core.logging import get_logger
 
 
 settings = get_settings()
+logger = get_logger()
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    async with engine.connect() as connection:
-        await connection.execute(text("SELECT 1"))
+    logger.info("Busan LocalHub 서버 시작 중...")
 
     try:
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
         yield
     finally:
         await dispose_engine()
+        logger.info("Busan LocalHub 서버 종료")
 
 
-app = FastAPI(
-    title="부산 소개 및 익명 게시판 플랫폼",
-    description="부산 소개 및 익명 게시판 플랫폼 API 문서입니다.",
-    version="0.1.0",
-    lifespan=lifespan,
-    openapi_url="/openapi.json" if settings.enable_openapi else None,
-    docs_url=(
-        "/docs"
-        if settings.enable_openapi and settings.enable_swagger_ui
-        else None
-    ),
-    redoc_url=(
-        "/redoc" if settings.enable_openapi and settings.enable_redoc else None
-    ),
-)
+def configure_middleware(app: FastAPI) -> None:
+    if settings.cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.cors_origins,
+            allow_credentials=settings.cors_allow_credentials,
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=[
+                "Accept",
+                "Authorization",
+                "Content-Type",
+                "X-Client-Id",
+            ],
+            expose_headers=["X-Request-ID"],
+            max_age=3600,
+        )
 
-if settings.cors_origins:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=settings.cors_allow_credentials,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Accept", "Authorization", "Content-Type", "X-Client-Id"],
+    @app.middleware("http")
+    async def logging_middleware(request: Request, call_next):
+        should_skip_logging = request.url.path in {
+            "/health",
+            "/version",
+            "/favicon.ico",
+        }
+        if should_skip_logging:
+            return await call_next(request)
+
+        request_id = str(uuid4())
+        request.state.request_id = request_id
+        started_at = time.perf_counter()
+        logger.info(
+            "START: %s %s [%s]",
+            request.method,
+            request.url.path,
+            request_id,
+        )
+
+        try:
+            response = await call_next(request)
+        except Exception:
+            logger.exception(
+                "FAIL: %s %s [%s]",
+                request.method,
+                request.url.path,
+                request_id,
+            )
+            raise
+
+        process_time_ms = (time.perf_counter() - started_at) * 1000
+        logger.info(
+            "END: %s %s %s (%.2fms) [%s]",
+            response.status_code,
+            request.method,
+            request.url.path,
+            process_time_ms,
+            request_id,
+        )
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+
+def register_routes(app: FastAPI) -> None:
+    @app.get("/version", tags=["system"])
+    async def get_version() -> dict[str, str]:
+        return {"version": settings.version}
+
+    @app.get("/health", tags=["system"])
+    async def health_check() -> dict[str, str]:
+        try:
+            async with engine.connect() as connection:
+                await connection.execute(text("SELECT 1"))
+        except SQLAlchemyError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database connection failed",
+            ) from exc
+
+        return {"status": "healthy", "database": "connected"}
+
+    # Register completed routers here, for example:
+    # app.include_router(chat_router, prefix="/api", tags=["AI"])
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="Busan LocalHub Server",
+        version=settings.version,
+        description="Busan LocalHub Server API",
+        lifespan=lifespan,
+        openapi_url="/openapi.json" if settings.enable_openapi else None,
+        docs_url=(
+            "/docs"
+            if settings.enable_openapi and settings.enable_swagger_ui
+            else None
+        ),
+        redoc_url=(
+            "/redoc"
+            if settings.enable_openapi and settings.enable_redoc
+            else None
+        ),
     )
+    configure_middleware(app)
+    register_routes(app)
+    return app
 
 
-@app.get("/health", tags=["system"], summary="Check server health")
-async def health_check() -> dict[str, str]:
-    return {"status": "ok"}
+app = create_app()

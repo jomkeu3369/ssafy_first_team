@@ -1,22 +1,42 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Self
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_DATABASE_PATH = PROJECT_ROOT / "data" / "localhub.db"
+
+
 class Settings(BaseSettings):
-    database_url: str = "sqlite+aiosqlite:///./localhub.db"
+    environment: str = "development"
+    version: str = "0.1.0"
+
+    database_url: str = (
+        f"sqlite+aiosqlite:///{DEFAULT_DATABASE_PATH.as_posix()}"
+    )
     database_echo: bool = False
-    frontend_origins: str = "http://localhost:5173"
+
+    frontend_origins: str = (
+        "http://127.0.0.1:5500,"
+        "http://localhost:5500,"
+        "http://localhost:5173"
+    )
     cors_allow_credentials: bool = False
+
     enable_openapi: bool = True
     enable_swagger_ui: bool = True
     enable_redoc: bool = False
 
+    log_level: str = "INFO"
+    log_dir: Path = PROJECT_ROOT / "logs"
+
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=PROJECT_ROOT / ".env",
         env_file_encoding="utf-8",
+        case_sensitive=False,
         extra="ignore",
     )
 

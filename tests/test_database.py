@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import text
 
-from app.core.database import engine
+from src.core.database import engine
 
 
 @pytest.mark.asyncio
@@ -10,5 +10,3 @@ async def test_sqlite_foreign_keys_are_enabled() -> None:
         enabled = await connection.scalar(text("PRAGMA foreign_keys"))
 
     assert enabled == 1
-
-    await engine.dispose()
