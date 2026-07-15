@@ -15,7 +15,7 @@ localhubwin/
 │  │  └─ prompts.py                # 도구 선택·근거 정책
 │  ├─ mcp_servers/
 │  │  ├─ local_search.py           # FAISS 검색 + 제한된 SQLite 검색
-│  │  └─ web_search.py             # OpenAI Responses API 웹 검색
+│  │  └─ web_search.py             # Tavily Search API 웹 검색
 │  ├─ core/                         # 설정, DB, 로깅
 │  └─ models/                       # SQLAlchemy Base 및 도메인 모델
 ├─ scripts/
@@ -44,7 +44,7 @@ uv run uvicorn main:app --reload
 OPENAI_API_KEY=...
 OPENAI_MODEL=사용할_채팅_모델
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-WEB_SEARCH_MODEL=
+TAVILY_API_KEY=tvly-...
 FAISS_INDEX_DIR=./data/faiss
 
 LANGSMITH_TRACING=true
@@ -52,7 +52,7 @@ LANGSMITH_API_KEY=...
 LANGSMITH_PROJECT=localhub-rag-agent
 ```
 
-`WEB_SEARCH_MODEL`을 비우면 `OPENAI_MODEL`을 사용합니다. 모델 이름은 코드에 고정하지 않아 팀이 계정과 비용 정책에 맞게 선택할 수 있습니다. OpenAI 설정이 없더라도 서버와 `/health`는 시작되며 `/api/chat`만 503을 반환합니다.
+웹 검색은 Tavily Search API를 사용하며 `TAVILY_API_KEY`가 필요합니다. OpenAI 설정은 채팅 에이전트와 로컬 FAISS 임베딩에만 사용합니다. OpenAI 설정이 없더라도 서버와 `/health`는 시작되며 채팅 API만 503을 반환합니다.
 
 ## FAISS 인덱스 만들기
 

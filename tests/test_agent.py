@@ -17,7 +17,7 @@ def test_chat_request_defaults() -> None:
 def test_system_prompt_contains_scope_gate() -> None:
     assert "Apply the scope gate before answering or calling any tool" in SYSTEM_PROMPT
     assert "do not call any tool" in SYSTEM_PROMPT
-    assert "부산 지역 정보와 LocalHub 관련 질문만" in SYSTEM_PROMPT
+    assert "부산 지역 정보와 관련 질문만" in SYSTEM_PROMPT
 
 
 def test_reference_extraction_from_tool_message() -> None:

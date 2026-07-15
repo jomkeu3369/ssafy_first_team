@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 from contextlib import AsyncExitStack
@@ -10,6 +11,9 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.memory import InMemorySaver
+from langsmith import Client
+from langsmith.run_helpers import tracing_context
 
 from src.agent.prompts import SYSTEM_PROMPT
 from src.agent.schemas import ChatRequest, ChatResponse, Reference
@@ -21,6 +25,8 @@ class AgentService:
         self.settings = settings
         self._exit_stack: AsyncExitStack | None = None
         self._agent: Any = None
+        self._langsmith_client: Client | None = None
+        self._checkpointer = InMemorySaver()
 
     @property
     def is_ready(self) -> bool:
@@ -54,7 +60,10 @@ class AgentService:
                 model=model,
                 tools=tools,
                 system_prompt=SYSTEM_PROMPT,
+                checkpointer=self._checkpointer
             )
+            if self.settings.langsmith_tracing and self.settings.langsmith_api_key:
+                self._langsmith_client = Client(api_key=self.settings.langsmith_api_key)
             self._exit_stack = stack
         except Exception:
             await stack.aclose()
@@ -62,28 +71,41 @@ class AgentService:
 
     async def close(self) -> None:
         self._agent = None
+
         if self._exit_stack is not None:
             await self._exit_stack.aclose()
             self._exit_stack = None
 
-    async def chat(self, request: ChatRequest) -> ChatResponse:
+        if self._langsmith_client is not None:
+            await asyncio.to_thread(self._langsmith_client.close, timeout=5)
+            self._langsmith_client = None
+
+    async def chat(self, request: ChatRequest, thread_id: str) -> ChatResponse:
         if not self.is_ready:
             raise RuntimeError("Agent is not ready")
 
-        messages: list[HumanMessage | AIMessage | SystemMessage] = [
-            SystemMessage(
-                content=f"The requested answer language is {request.language}."
-            )
-        ]
-        for item in request.history:
-            message_class = HumanMessage if item.role == "user" else AIMessage
-            messages.append(message_class(content=item.content))
+        config = {"recursion_limit": self.settings.agent_recursion_limit, "configurable": {"thread_id": thread_id}}
+        state = await self._agent.aget_state(config)
+        messages: list[HumanMessage | AIMessage | SystemMessage] = []
+        
+        if not state.values.get("messages"):
+            messages.append(SystemMessage(content=f"The requested answer language is {request.language}."))
+            for item in request.history:
+                message_class = HumanMessage if item.role == "user" else AIMessage
+                messages.append(message_class(content=item.content))
+        
         messages.append(HumanMessage(content=request.message))
 
-        result = await self._agent.ainvoke(
-            {"messages": messages},
-            config={"recursion_limit": self.settings.agent_recursion_limit},
-        )
+        with tracing_context(
+            enabled=self._langsmith_client is not None,
+            client=self._langsmith_client,
+            project_name=self.settings.langsmith_project,
+            metadata={"language": request.language},
+        ):
+            result = await self._agent.ainvoke(
+                {"messages": messages},
+                config=config
+            )
         result_messages = result.get("messages", [])
         answer = next(
             (
@@ -113,6 +135,7 @@ class AgentService:
     def _message_text(message: AIMessage) -> str:
         if isinstance(message.content, str):
             return message.content
+        
         return "".join(
             block.get("text", "")
             for block in message.content
@@ -126,22 +149,28 @@ class AgentService:
         for message in messages:
             if not isinstance(message, ToolMessage):
                 continue
+            
             artifact = message.artifact
             payload = (
                 artifact.get("structured_content")
                 if isinstance(artifact, dict)
                 else None
             )
+
             if payload is None:
                 payload = cls._tool_payload(message.content)
+            
             if not isinstance(payload, dict):
                 continue
+            
             for item in payload.get("items", []):
                 source_type = str(item.get("sourceType", "document"))
                 source_id = str(item.get("sourceId", ""))
                 key = (source_type, source_id)
+
                 if key in seen:
                     continue
+
                 seen.add(key)
                 references.append(
                     Reference(
@@ -152,31 +181,34 @@ class AgentService:
                         image_url=item.get("imageUrl"),
                     )
                 )
+
             for citation in payload.get("citations", []):
                 url = citation.get("url")
                 if not url or ("web", url) in seen:
                     continue
+
                 seen.add(("web", url))
-                references.append(
-                    Reference(type="web", title=citation.get("title"), url=url)
-                )
+                references.append(Reference(type="web", title=citation.get("title"), url=url))
         return references
 
     @staticmethod
     def _tool_payload(content: Any) -> Any:
         if isinstance(content, dict):
             return content
+        
         if isinstance(content, str):
             try:
                 return json.loads(content)
             except json.JSONDecodeError:
                 return None
+        
         if isinstance(content, list):
             text_blocks = [
                 block.get("text", "")
                 for block in content
                 if isinstance(block, dict) and block.get("type") == "text"
             ]
+            
             if text_blocks:
                 try:
                     return json.loads("".join(text_blocks))

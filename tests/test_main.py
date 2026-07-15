@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -46,6 +48,6 @@ def test_cors_preflight() -> None:
 def test_chat_is_unavailable_without_agent_configuration() -> None:
     with TestClient(app) as client:
         client.app.state.agent_service = None
-        response = client.post("/api/chat", json={"message": "안녕하세요"})
+        response = client.post("/api/v1/chat", headers={"X-Client-Id": str(uuid4())}, json={"message": "안녕하세요"})
 
     assert response.status_code == 503

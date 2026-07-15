@@ -21,9 +21,13 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_model: str | None = None
     openai_embedding_model: str = "text-embedding-3-small"
-    web_search_model: str | None = None
+    tavily_api_key: str | None = None
     faiss_index_dir: Path = DEFAULT_FAISS_INDEX_PATH
     agent_recursion_limit: int = 8
+
+    langsmith_tracing: bool = False
+    langsmith_api_key: str | None = None
+    langsmith_project: str = "localhub-rag-agent"
 
     frontend_origins: str = (
         "http://127.0.0.1:5500,http://localhost:5500,http://localhost:5173"
@@ -58,11 +62,6 @@ class Settings(BaseSettings):
             msg = "CORS credentials cannot be enabled with a wildcard origin"
             raise ValueError(msg)
         return self
-
-    @property
-    def effective_web_search_model(self) -> str | None:
-        return self.web_search_model or self.openai_model
-
 
 @lru_cache
 def get_settings() -> Settings:

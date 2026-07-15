@@ -10,6 +10,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.agent.router import router as chat_router
 from src.api.board.router import router as board_router
+from src.api.comment.router import router as comment_router
+from src.api.post.router import router as post_router
 
 from src.agent.service import AgentService
 from src.core.config import get_settings
@@ -103,6 +105,8 @@ def register_routes(app: FastAPI) -> None:
 
     app.include_router(chat_router, prefix="/api/v1", tags=["AI"])
     app.include_router(board_router, prefix="/api/v1", tags=["Boards"])
+    app.include_router(post_router, prefix="/api/v1", tags=["Posts"])
+    app.include_router(comment_router, prefix="/api/v1", tags=["Comments"])
 
 
 def create_app() -> FastAPI:

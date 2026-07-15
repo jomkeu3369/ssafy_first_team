@@ -21,18 +21,18 @@ class Comment(Base):
         ForeignKey("post.postId"),
         nullable=False,
     )
-    parent_id: Mapped[int] = mapped_column(
+    parent_id: Mapped[int | None] = mapped_column(
         "parentId",
         BigInteger,
         ForeignKey("comment.commentId"),
-        nullable=False,
+        nullable=True,
     )
     author: Mapped[str] = mapped_column(String, nullable=False, comment="UUID")
     content: Mapped[str] = mapped_column(Text, nullable=False)
     password: Mapped[str] = mapped_column(String, nullable=False)
 
     post: Mapped["Post"] = relationship(back_populates="comments")
-    parent: Mapped[Comment] = relationship(
+    parent: Mapped[Comment | None] = relationship(
         back_populates="children",
         remote_side=[comment_id],
     )
