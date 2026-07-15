@@ -7,7 +7,7 @@ from sqlalchemy import text
 from src.core.database import engine
 
 
-SEARCHABLE_TABLES: dict[str, dict[str, list[str]]] = {"Board": {"id": ["boardId"], "title": ["name"], "content": ["description"], "address": [], "image_url": [], "region": [], "category": ["category"]}, "post": {"id": ["postId"], "title": ["title"], "content": ["content"], "address": [], "image_url": [], "region": [], "category": []}}
+SEARCHABLE_TABLES: dict[str, dict[str, list[str]]] = {"Board": {"id": ["boardId"], "title": ["name"], "content": ["description"], "address": [], "image_url": ["image"], "region": [], "category": ["category"]}, "post": {"id": ["postId"], "title": ["title"], "content": ["content"], "address": [], "image_url": [], "region": [], "category": []}}
 CONTENT_TYPE_ALIASES = {"board": "Board", "boards": "Board", "regional_contents": "Board", "post": "post", "posts": "post"}
 
 

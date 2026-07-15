@@ -21,5 +21,6 @@ class Board(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     category: Mapped[str] = mapped_column(String(50), nullable=False)
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    image: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
     posts: Mapped[list[Post]] = relationship(back_populates="board")

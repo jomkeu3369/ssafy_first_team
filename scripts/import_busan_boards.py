@@ -25,6 +25,7 @@ class CleanBoard:
     name: str
     category: str
     description: str | None
+    image: str | None
 
 
 def clean_text(value: Any) -> str:
@@ -85,6 +86,7 @@ def load_boards(source_paths: list[Path]) -> tuple[list[CleanBoard], int]:
                     name=name,
                     category=category,
                     description=build_description(item),
+                    image=clean_text(item.get("firstimage") or item.get("firstimage2"))[:2000] or None
                 )
             )
 
@@ -114,13 +116,15 @@ async def import_boards(boards: list[CleanBoard], update_existing: bool) -> tupl
                     name=item.name,
                     category=item.category,
                     description=item.description,
+                    image=item.image
                 )
                 session.add(row)
                 existing[(item.name, item.category)] = row
                 next_id += 1
                 inserted += 1
-            elif update_existing and row.description != item.description:
+            elif update_existing and (row.description != item.description or row.image != item.image):
                 row.description = item.description
+                row.image = item.image
                 updated += 1
             else:
                 unchanged += 1

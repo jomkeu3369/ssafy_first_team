@@ -36,6 +36,7 @@ class CleanBoard:
     name: str
     category: str
     description: str | None
+    image: str | None
 
 
 _import_lock = asyncio.Lock()
@@ -90,7 +91,8 @@ async def clean_uploads(files: list[UploadFile]) -> tuple[list[CleanBoard], int,
                 skipped += 1
                 continue
             seen.add(key)
-            boards.append(CleanBoard(name=name, category=category, description=_build_description(item)))
+            image = _clean_text(item.get("firstimage") or item.get("firstimage2"))[:2000] or None
+            boards.append(CleanBoard(name=name, category=category, description=_build_description(item), image=image))
             categories[category] = categories.get(category, 0) + 1
     return boards, skipped, categories
 
@@ -115,12 +117,13 @@ async def import_boards(db: AsyncSession, files: list[UploadFile], update_existi
         for item in boards:
             row = existing.get((item.name, item.category))
             if row is None:
-                row = Board(board_id=_new_board_id(occupied), name=item.name, category=item.category, description=item.description)
+                row = Board(board_id=_new_board_id(occupied), name=item.name, category=item.category, description=item.description, image=item.image)
                 db.add(row)
                 existing[(item.name, item.category)] = row
                 inserted += 1
-            elif update_existing and row.description != item.description:
+            elif update_existing and (row.description != item.description or row.image != item.image):
                 row.description = item.description
+                row.image = item.image
                 updated += 1
             else:
                 unchanged += 1

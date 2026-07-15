@@ -17,6 +17,7 @@ from src.api.like.router import router as like_router
 from src.api.media.router import router as media_router
 from src.api.post.router import router as post_router
 from src.api.realtime.router import router as realtime_router
+from src.api.search.router import router as search_router
 from src.api.tag.router import router as tag_router
 from src.api.tourism.router import router as tourism_router
 
@@ -119,6 +120,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(media_router, prefix="/api/v1", tags=["Media"])
     app.include_router(tourism_router, prefix="/api/v1", tags=["Tourism"])
     app.include_router(realtime_router, prefix="/api/v1", tags=["Realtime"])
+    app.include_router(search_router, prefix="/api/v1", tags=["Search"])
     app.include_router(data_import_router, prefix="/api/v1", tags=["Admin Data Import"])
 
 

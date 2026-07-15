@@ -57,6 +57,9 @@ async def test_tags_and_persistent_idempotent_likes() -> None:
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         tags = await client.get("/api/v1/tags")
+        created_tag = await client.post("/api/v1/tags", json={"name": "야경"})
+        duplicate_tag = await client.post("/api/v1/tags", json={"name": "야경"})
+        default_tag = await client.post("/api/v1/tags", json={"name": "관광지"})
         first = await client.post("/api/v1/posts/0/likes", headers=first_headers)
         duplicate = await client.post("/api/v1/posts/0/likes", headers=first_headers)
         second = await client.post("/api/v1/posts/0/likes", headers=second_headers)
@@ -66,6 +69,10 @@ async def test_tags_and_persistent_idempotent_likes() -> None:
     assert tags.status_code == 200
     assert tags.json()[0] == {"tagId": 1, "name": "관광지", "category": "ATTRACTION"}
     assert tags.json()[-1] == {"tagId": 10, "name": "사용자 태그", "category": "CUSTOM"}
+    assert created_tag.status_code == 201
+    assert created_tag.json() == {"tagId": 11, "name": "야경", "category": "CUSTOM"}
+    assert duplicate_tag.status_code == 409
+    assert default_tag.status_code == 409
     assert first.json() == {"liked": True, "likeCount": 1}
     assert duplicate.json() == {"liked": True, "likeCount": 1}
     assert second.json() == {"liked": True, "likeCount": 2}

@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from src.api.post.passwords import hash_password, verify_password
 from src.api.post.schema import MediaResponse, PostPageResponse, PostResponse, PostSort, PostWrite, TagResponse, tag_category
+from src.api.tag.crud import DEFAULT_TAGS
 from src.models.board import Board
 from src.models.comment import Comment
 from src.models.media import Media
@@ -65,9 +66,13 @@ async def _resolve_tags(db: AsyncSession, payload: PostWrite) -> list[Tag]:
     resolved: list[Tag] = []
     for item in payload.tags:
         expected_category = tag_category(item.tag_id)
-        if item.tag_id <= 9 and item.category != expected_category:
-            raise TagValidationError
         tag = await db.get(Tag, item.tag_id)
+        if item.tag_id <= 9:
+            expected_name = DEFAULT_TAGS[item.tag_id][0]
+            if item.name != expected_name or item.category != expected_category:
+                raise TagValidationError
+        elif item.category != "CUSTOM" or tag is None or tag.name != item.name:
+            raise TagValidationError
         if tag is None:
             tag = Tag(tag_id=item.tag_id, name=item.name)
             db.add(tag)

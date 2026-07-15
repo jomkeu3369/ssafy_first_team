@@ -26,12 +26,12 @@ def _board_select():
     post_count = select(func.count(Post.post_id)).where(Post.board_id == Board.board_id).correlate(Board).scalar_subquery()
     latest_title = select(Post.title).where(Post.board_id == Board.board_id).order_by(Post.post_id.desc()).limit(1).correlate(Board).scalar_subquery()
     latest_image = select(Media.image_url).join(Post, Media.post_id == Post.post_id).where(Post.board_id == Board.board_id).order_by(Post.post_id.desc(), Media.sequence, Media.media_id).limit(1).correlate(Board).scalar_subquery()
-    return select(Board, post_count.label("recent_post_count"), latest_title.label("recent_excerpt"), latest_image.label("image"))
+    return select(Board, post_count.label("recent_post_count"), latest_title.label("recent_excerpt"), latest_image.label("latest_image"))
 
 
 def _to_response(row) -> BoardResponse:
     board = row[0]
-    return BoardResponse(board_id=board.board_id, name=board.name, category=board.category, description=board.description, image=row.image or "", recent_post_count=row.recent_post_count or 0, last_activity_at=None, recent_excerpt=row.recent_excerpt or "")
+    return BoardResponse(board_id=board.board_id, name=board.name, category=board.category, description=board.description, image=board.image or row.latest_image or "", recent_post_count=row.recent_post_count or 0, last_activity_at=None, recent_excerpt=row.recent_excerpt or "")
 
 
 async def create_board(db: AsyncSession, board_create: BoardCreate) -> Board:

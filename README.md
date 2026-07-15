@@ -117,11 +117,23 @@ Render 환경 변수에 충분히 긴 임의 문자열을 등록합니다.
 DATA_IMPORT_API_KEY=replace-with-a-long-random-secret
 ```
 
-Swagger의 `POST /api/v1/admin/data-import/boards`에서 `부산_*.json` 파일들을 한 번에 선택하고 `X-Import-Key` 헤더에 같은 값을 전달합니다. 동일한 이름과 카테고리는 다시 삽입하지 않으며, 기존 설명도 갱신하려면 `updateExisting=true`를 사용합니다.
+Swagger의 `POST /api/v1/admin/data-import/boards`에서 `부산_*.json` 파일들을 한 번에 선택하고 `X-Import-Key` 헤더에 같은 값을 전달합니다. 가져오기 API는 각 항목의 `firstimage` 또는 `firstimage2`를 `Board.image`에 저장합니다. 동일한 이름과 카테고리는 다시 삽입하지 않으며, 기존 설명과 이미지 주소도 갱신하려면 `updateExisting=true`를 사용합니다.
+
+마이그레이션을 수동으로 진행하는 환경에서는 배포 전에 `Board` 테이블에 nullable 이미지 컬럼을 추가해야 합니다.
+
+```sql
+ALTER TABLE "Board" ADD COLUMN image VARCHAR(2000) NULL;
+```
 
 ```powershell
 curl.exe -X POST "https://YOUR-SERVICE.onrender.com/api/v1/admin/data-import/boards?updateExisting=true" -H "X-Import-Key: YOUR_SECRET" -F "files=@C:/Users/SSAFY/Desktop/data2/부산/부산_관광지.json" -F "files=@C:/Users/SSAFY/Desktop/data2/부산/부산_축제공연행사.json"
 ```
+
+## 태그와 통합 검색
+
+`POST /api/v1/tags`에 `{"name":"야경"}`을 전달하면 `tagId` 10 이상의 `CUSTOM` 태그를 생성합니다. 게시글에는 `GET /api/v1/tags` 또는 태그 생성 응답으로 받은 정확한 `tagId`, `name`, `category`를 전달해야 합니다.
+
+`GET /api/v1/search?q=해운대&page=1&size=20`은 보드 이름·설명·카테고리와 게시글 제목·본문·태그명을 검색합니다. 결과의 `resultType`은 `BOARD` 또는 `POST`입니다.
 
 ## 개발 명령
 

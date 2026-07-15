@@ -29,8 +29,8 @@ async def _app_with_database():
     return app, engine, session_factory
 
 
-def _upload(name: str, category: str, address: str) -> tuple[str, tuple[str, bytes, str]]:
-    payload = {"contentType": category, "items": [{"title": name, "addr1": address}, {"title": name, "addr1": address}, {"title": ""}]}
+def _upload(name: str, category: str, address: str, image: str = "https://example.com/image.jpg") -> tuple[str, tuple[str, bytes, str]]:
+    payload = {"contentType": category, "items": [{"title": name, "addr1": address, "firstimage": image}, {"title": name, "addr1": address}, {"title": ""}]}
     return "files", (f"부산_{category}.json", json.dumps(payload, ensure_ascii=False).encode(), "application/json")
 
 
@@ -61,7 +61,7 @@ async def test_protected_import_inserts_updates_and_skips_duplicates() -> None:
             denied = await client.post("/api/v1/admin/data-import/boards", files=files)
             inserted = await client.post("/api/v1/admin/data-import/boards", headers=headers, files=files)
             unchanged = await client.post("/api/v1/admin/data-import/boards", headers=headers, files=files)
-            updated = await client.post("/api/v1/admin/data-import/boards", headers=headers, params={"updateExisting": "true"}, files=[_upload("해운대 해수욕장", "관광지", "부산 해운대구 우동")])
+            updated = await client.post("/api/v1/admin/data-import/boards", headers=headers, params={"updateExisting": "true"}, files=[_upload("해운대 해수욕장", "관광지", "부산 해운대구 우동", "https://example.com/updated.jpg")])
     finally:
         router_module.settings.data_import_api_key = original_key
 
@@ -76,6 +76,7 @@ async def test_protected_import_inserts_updates_and_skips_duplicates() -> None:
         assert await session.scalar(select(func.count(Board.board_id))) == 2
         board = (await session.scalars(select(Board).where(Board.name == "해운대 해수욕장"))).one()
         assert board.description == "주소: 부산 해운대구 우동"
+        assert board.image == "https://example.com/updated.jpg"
     await engine.dispose()
 
 
