@@ -34,6 +34,19 @@ def _upload(name: str, category: str, address: str) -> tuple[str, tuple[str, byt
     return "files", (f"부산_{category}.json", json.dumps(payload, ensure_ascii=False).encode(), "application/json")
 
 
+def test_import_openapi_exposes_multiple_binary_files() -> None:
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+    specification = app.openapi()
+    operation = specification["paths"]["/api/v1/admin/data-import/boards"]["post"]
+    request_schema = operation["requestBody"]["content"]["multipart/form-data"]["schema"]
+    schema_name = request_schema["$ref"].rsplit("/", 1)[-1]
+    files_schema = specification["components"]["schemas"][schema_name]["properties"]["files"]
+
+    assert files_schema["type"] == "array"
+    assert files_schema["items"] == {"type": "string", "format": "binary"}
+
+
 @pytest.mark.asyncio
 async def test_protected_import_inserts_updates_and_skips_duplicates() -> None:
     app, engine, session_factory = await _app_with_database()

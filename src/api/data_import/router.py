@@ -26,7 +26,7 @@ def _authorized(import_key: str | None) -> bool:
 
 
 @router.post("/boards", response_model=ImportResponse, response_model_by_alias=True, responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 413: {"model": ErrorResponse}, 500: {"model": ErrorResponse}, 503: {"model": ErrorResponse}})
-async def import_board_data(files: Annotated[list[UploadFile], File(description="부산_*.json 파일들")], db: Annotated[AsyncSession, Depends(get_db_session)], import_key: Annotated[str | None, Header(alias="X-Import-Key")] = None, update_existing: Annotated[bool, Query(alias="updateExisting")] = False) -> ImportResponse | JSONResponse:
+async def import_board_data(files: Annotated[list[UploadFile], File(description="부산_*.json 파일들", json_schema_extra={"items": {"type": "string", "format": "binary"}})], db: Annotated[AsyncSession, Depends(get_db_session)], import_key: Annotated[str | None, Header(alias="X-Import-Key")] = None, update_existing: Annotated[bool, Query(alias="updateExisting")] = False) -> ImportResponse | JSONResponse:
     if not settings.data_import_api_key:
         return _error(status.HTTP_503_SERVICE_UNAVAILABLE, "데이터 import API 키가 설정되지 않았습니다.")
     if not _authorized(import_key):
