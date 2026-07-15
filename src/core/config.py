@@ -9,6 +9,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATABASE_PATH = PROJECT_ROOT / "data" / "localhub.db"
 DEFAULT_FAISS_INDEX_PATH = PROJECT_ROOT / "data" / "faiss"
+DEFAULT_MEDIA_PATH = PROJECT_ROOT / "data" / "media"
+DEFAULT_TOURISM_DATA_PATH = Path.home() / "Desktop" / "data2" / "부산"
 
 
 class Settings(BaseSettings):
@@ -23,6 +25,8 @@ class Settings(BaseSettings):
     openai_embedding_model: str = "text-embedding-3-small"
     tavily_api_key: str | None = None
     faiss_index_dir: Path = DEFAULT_FAISS_INDEX_PATH
+    media_dir: Path = DEFAULT_MEDIA_PATH
+    tourism_data_dir: Path = DEFAULT_TOURISM_DATA_PATH
     agent_recursion_limit: int = 8
 
     langsmith_tracing: bool = False

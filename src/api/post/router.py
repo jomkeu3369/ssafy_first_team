@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.post import crud
 from src.api.post.rate_limit import VerifyRateLimiter
 from src.api.post.schema import ErrorResponse, PasswordRequest, PasswordVerifyResponse, PostPageResponse, PostResponse, PostSort, PostWrite
+from src.api.realtime.manager import manager as realtime_manager
 from src.core.database import get_db_session
 
 
@@ -39,7 +40,10 @@ async def get_post(post_id: Annotated[int, Path(ge=0)], client_id: Annotated[UUI
 @router.post("/boards/{board_id}/posts", response_model=PostResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED, responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}})
 async def create_post(board_id: Annotated[int, Path(ge=0)], payload: PostWrite, client_id: Annotated[UUID, Header(alias="X-Client-Id")], db: Annotated[AsyncSession, Depends(get_db_session)]) -> PostResponse | JSONResponse:
     try:
-        return await crud.create_post(db, board_id, payload, str(client_id))
+        created = await crud.create_post(db, board_id, payload, str(client_id))
+        created_at = created.created_at.isoformat() if created.created_at is not None else None
+        await realtime_manager.broadcast_post_created(created.post_id, created.board_id, created.title, created_at)
+        return created
     except crud.BoardNotFoundError:
         return _error(status.HTTP_404_NOT_FOUND, "게시판을 찾을 수 없습니다.")
     except crud.TagValidationError:

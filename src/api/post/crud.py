@@ -12,6 +12,7 @@ from src.models.board import Board
 from src.models.comment import Comment
 from src.models.media import Media
 from src.models.post import Post
+from src.models.post_like import PostLike
 from src.models.post_tag import post_tags
 from src.models.tag import Tag
 
@@ -166,6 +167,7 @@ async def delete_post(db: AsyncSession, post_id: int, password: str) -> None:
         raise PasswordMismatchError
 
     await db.execute(delete(post_tags).where(post_tags.c["postId"] == post_id))
+    await db.execute(delete(PostLike).where(PostLike.post_id == post_id))
     await db.execute(delete(Media).where(Media.post_id == post_id))
     await db.execute(delete(Comment).where(Comment.post_id == post_id))
     await db.delete(post)

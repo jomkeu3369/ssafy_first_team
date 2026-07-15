@@ -9,7 +9,7 @@ localhubwin/
 ├─ main.py                         # FastAPI 앱, lifespan, CORS, 라우터 등록
 ├─ src/
 │  ├─ agent/
-│  │  ├─ router.py                 # POST /api/chat
+│  │  ├─ router.py                 # POST /api/v1/chat
 │  │  ├─ schemas.py                # 요청·응답 모델
 │  │  ├─ service.py                # create_agent와 MCP 세션 수명주기
 │  │  └─ prompts.py                # 도구 선택·근거 정책
@@ -80,7 +80,7 @@ uv run python scripts/build_faiss_index.py
 
 ## API
 
-`POST /api/chat`
+`POST /api/v1/chat` (`X-Client-Id` UUID 헤더 필수)
 
 ```json
 {

@@ -5,13 +5,19 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.agent.router import router as chat_router
 from src.api.board.router import router as board_router
 from src.api.comment.router import router as comment_router
+from src.api.like.router import router as like_router
+from src.api.media.router import router as media_router
 from src.api.post.router import router as post_router
+from src.api.realtime.router import router as realtime_router
+from src.api.tag.router import router as tag_router
+from src.api.tourism.router import router as tourism_router
 
 from src.agent.service import AgentService
 from src.core.config import get_settings
@@ -107,9 +113,15 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(board_router, prefix="/api/v1", tags=["Boards"])
     app.include_router(post_router, prefix="/api/v1", tags=["Posts"])
     app.include_router(comment_router, prefix="/api/v1", tags=["Comments"])
+    app.include_router(tag_router, prefix="/api/v1", tags=["Tags"])
+    app.include_router(like_router, prefix="/api/v1", tags=["Likes"])
+    app.include_router(media_router, prefix="/api/v1", tags=["Media"])
+    app.include_router(tourism_router, prefix="/api/v1", tags=["Tourism"])
+    app.include_router(realtime_router, prefix="/api/v1", tags=["Realtime"])
 
 
 def create_app() -> FastAPI:
+    settings.media_dir.mkdir(parents=True, exist_ok=True)
     app = FastAPI(
         title="Busan LocalHub Server",
         version=settings.version,
@@ -125,6 +137,7 @@ def create_app() -> FastAPI:
     )
     configure_middleware(app)
     register_routes(app)
+    app.mount("/media", StaticFiles(directory=settings.media_dir), name="media")
     return app
 
 

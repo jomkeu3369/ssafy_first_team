@@ -1,0 +1,148 @@
+import json
+from datetime import date
+from pathlib import Path
+from uuid import uuid4
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from src.api.like.router import router as like_router
+from src.api.media import router as media_router_module
+from src.api.media.router import router as media_router
+from src.api.realtime.manager import manager
+from src.api.realtime.router import router as realtime_router
+from src.api.tag.router import router as tag_router
+from src.api.tourism import router as tourism_router_module
+from src.api.tourism.router import router as tourism_router
+from src.api.tourism.service import get_festivals
+from src.core.database import get_db_session
+from src.models import Base
+from src.models.board import Board
+from src.models.post import Post
+from src.models.tag import Tag
+
+
+async def _database_app():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        session.add(Board(board_id=0, name="자유 게시판", category="FREE"))
+        session.add(Post(post_id=0, board_id=0, title="게시글", author=str(uuid4()), content="본문", password="unused", view_count=0, like_count=0))
+        session.add(Tag(tag_id=10, name="사용자 태그"))
+        await session.commit()
+
+    app = FastAPI()
+    app.include_router(tag_router, prefix="/api/v1")
+    app.include_router(like_router, prefix="/api/v1")
+
+    async def override_session():
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_session
+    return app, engine
+
+
+@pytest.mark.asyncio
+async def test_tags_and_persistent_idempotent_likes() -> None:
+    app, engine = await _database_app()
+    transport = ASGITransport(app=app)
+    first_headers = {"X-Client-Id": str(uuid4())}
+    second_headers = {"X-Client-Id": str(uuid4())}
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        tags = await client.get("/api/v1/tags")
+        first = await client.post("/api/v1/posts/0/likes", headers=first_headers)
+        duplicate = await client.post("/api/v1/posts/0/likes", headers=first_headers)
+        second = await client.post("/api/v1/posts/0/likes", headers=second_headers)
+        mine = await client.get("/api/v1/posts/0/likes/me", headers=first_headers)
+        removed = await client.delete("/api/v1/posts/0/likes", headers=first_headers)
+
+    assert tags.status_code == 200
+    assert tags.json()[0] == {"tagId": 1, "name": "관광지", "category": "ATTRACTION"}
+    assert tags.json()[-1] == {"tagId": 10, "name": "사용자 태그", "category": "CUSTOM"}
+    assert first.json() == {"liked": True, "likeCount": 1}
+    assert duplicate.json() == {"liked": True, "likeCount": 1}
+    assert second.json() == {"liked": True, "likeCount": 2}
+    assert mine.json() == {"liked": True, "likeCount": 2}
+    assert removed.json() == {"liked": False, "likeCount": 1}
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_media_upload_validates_and_saves_image(tmp_path: Path) -> None:
+    original_media_dir = media_router_module.settings.media_dir
+    media_router_module.settings.media_dir = tmp_path
+    app = FastAPI()
+    app.include_router(media_router, prefix="/api/v1")
+    transport = ASGITransport(app=app)
+    png = b"\x89PNG\r\n\x1a\n" + b"image-data"
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            uploaded = await client.post("/api/v1/media", files={"file": ("sample.png", png, "image/png")})
+            invalid = await client.post("/api/v1/media", files={"file": ("fake.png", b"not-image", "image/png")})
+    finally:
+        media_router_module.settings.media_dir = original_media_dir
+
+    assert uploaded.status_code == 201
+    assert uploaded.json()["imageUrl"].startswith("http://test/media/")
+    assert len(list(tmp_path.glob("*.png"))) == 1
+    assert invalid.status_code == 400
+
+
+def _write_tourism_files(data_dir: Path) -> None:
+    attraction = {"items": [{"contentid": "place-1", "title": "송도 해수욕장", "addr1": "부산 서구", "firstimage": "https://example.com/place.jpg"}]}
+    festival = {"items": [{"contentid": "festival-1", "title": "부산 테스트 축제", "eventplace": "광안리", "eventstartdate": "20260701", "eventenddate": "20260731", "firstimage": "https://example.com/festival.jpg"}]}
+    (data_dir / "부산_관광지.json").write_text(json.dumps(attraction, ensure_ascii=False), encoding="utf-8")
+    (data_dir / "부산_축제공연행사.json").write_text(json.dumps(festival, ensure_ascii=False), encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_tourism_list_detail_and_date_status(tmp_path: Path) -> None:
+    _write_tourism_files(tmp_path)
+    original_data_dir = tourism_router_module.settings.tourism_data_dir
+    tourism_router_module.settings.tourism_data_dir = tmp_path
+    app = FastAPI()
+    app.include_router(tourism_router, prefix="/api/v1")
+    transport = ASGITransport(app=app)
+
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            attractions = await client.get("/api/v1/tourism/attractions")
+            attraction = await client.get("/api/v1/tourism/attractions/place-1")
+            festival = await client.get("/api/v1/tourism/festivals/festival-1")
+            missing = await client.get("/api/v1/tourism/attractions/missing")
+    finally:
+        tourism_router_module.settings.tourism_data_dir = original_data_dir
+
+    assert attractions.status_code == 200
+    assert attractions.json()[0]["category"] == "BEACH"
+    assert attraction.json()["contentId"] == "place-1"
+    assert festival.json()["startDate"] == "2026-07-01"
+    assert missing.status_code == 404
+    assert get_festivals(tmp_path, today=date(2026, 7, 15))[0].status == "ONGOING"
+
+
+def test_websocket_counts_unique_clients_with_camel_case() -> None:
+    app = FastAPI()
+    app.include_router(realtime_router, prefix="/api/v1")
+    client_id = str(uuid4())
+
+    with TestClient(app) as client:
+        with client.websocket_connect(f"/api/v1/ws?clientId={client_id}") as first:
+            assert first.receive_json() == {"event": "presence.updated", "data": {"connectedCount": 1}}
+            with client.websocket_connect(f"/api/v1/ws?clientId={client_id}") as second:
+                assert first.receive_json() == {"event": "presence.updated", "data": {"connectedCount": 1}}
+                assert second.receive_json() == {"event": "presence.updated", "data": {"connectedCount": 1}}
+                manager_event = {"event": "post.created", "data": {"postId": 1}}
+                client.portal.call(manager.broadcast, manager_event)
+                assert first.receive_json() == manager_event
+                assert second.receive_json() == manager_event
+
+    assert manager.connected_count == 0

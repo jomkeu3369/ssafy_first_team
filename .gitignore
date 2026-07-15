@@ -8,6 +8,7 @@ __pycache__/
 *.db-shm
 *.db-wal
 data/faiss/
+data/media/
 .uv-cache/
 logs/
 api_spac.md
