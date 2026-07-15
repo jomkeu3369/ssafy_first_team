@@ -65,9 +65,10 @@ async def test_post_api_crud_search_view_and_password_verify() -> None:
         missing = await client.get(f"/api/v1/posts/{post_id}", headers=headers)
 
     assert created.status_code == 201
+    assert created.json()["postId"] == 1
     assert created.json()["author"] == client_id
     assert "password" not in created.json()
-    assert created.json()["tags"] == [{"tagId": 1, "name": "관광지", "category": "ATTRACTION"}]
+    assert created.json()["tags"] == [{"tagId": 1, "name": "관광지", "nameEn": "Attraction", "category": "ATTRACTION"}]
     assert created.json()["media"] == [{"mediaId": 12, "imageUrl": "https://example.com/night.jpg"}]
     assert detail.status_code == 200 and detail.json()["viewCount"] == 1
     assert duplicate_view.json()["viewCount"] == 1
@@ -100,4 +101,23 @@ async def test_post_api_rejects_missing_board_and_bad_tag_category() -> None:
     assert missing_board.status_code == 404
     assert bad_tag.status_code == 400
     assert bad_tag.json() == {"message": "태그 정보가 올바르지 않습니다."}
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_popular_posts_combines_all_boards_and_paginates() -> None:
+    app, engine, session_factory = await _app_with_database()
+    async with session_factory() as session:
+        session.add(Board(board_id=1, name="관광 게시판", category="관광지"))
+        session.add_all([Post(post_id=1, board_id=0, title="일반 글", author="client", content="본문", password="hash", view_count=10, like_count=1), Post(post_id=2, board_id=1, title="인기 글", author="client", content="본문", password="hash", view_count=20, like_count=5)])
+        await session.commit()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/posts/popular", params={"page": 1, "size": 1})
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 2
+    assert response.json()["items"][0]["postId"] == 2
+    assert response.json()["items"][0]["boardId"] == 1
     await engine.dispose()

@@ -51,13 +51,16 @@ async def test_comment_api_builds_two_level_tree_and_uses_header_author() -> Non
         comments = await client.get("/api/v1/posts/1/comments")
 
     assert parent.status_code == 201
+    assert parent_id == 1
     assert parent.json()["author"] == client_id
     assert "password" not in parent.json()
     assert child.status_code == 201
+    assert child_id == 2
     assert too_deep.status_code == 400
     assert comments.status_code == 200
-    assert comments.json()[0]["children"][0]["commentId"] == child_id
-    assert comments.json()[0]["children"][0]["children"] == []
+    assert comments.json()["total"] == 1
+    assert comments.json()["items"][0]["children"][0]["commentId"] == child_id
+    assert comments.json()["items"][0]["children"][0]["children"] == []
 
     async with session_factory() as session:
         stored = await session.get(Comment, parent_id)
@@ -86,10 +89,10 @@ async def test_comment_update_password_and_soft_delete_parent() -> None:
     assert denied.status_code == 401
     assert updated.status_code == 200 and updated.json()["content"] == "수정"
     assert soft_deleted.status_code == 204
-    assert after_soft_delete.json()[0]["content"] == DELETED_COMMENT_CONTENT
-    assert after_soft_delete.json()[0]["children"][0]["commentId"] == child_id
+    assert after_soft_delete.json()["items"][0]["content"] == DELETED_COMMENT_CONTENT
+    assert after_soft_delete.json()["items"][0]["children"][0]["commentId"] == child_id
     assert hard_deleted.status_code == 204
-    assert after_hard_delete.json()[0]["children"] == []
+    assert after_hard_delete.json()["items"][0]["children"] == []
     await engine.dispose()
 
 

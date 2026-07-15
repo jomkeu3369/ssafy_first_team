@@ -5,10 +5,9 @@ __pycache__/
 .ruff_cache/
 *.py[cod]
 *.db
+!data/localhub.db
 *.db-shm
 *.db-wal
-data/faiss/
-data/media/
 .uv-cache/
 logs/
 api_spac.md

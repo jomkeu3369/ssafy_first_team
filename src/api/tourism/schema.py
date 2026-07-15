@@ -19,25 +19,50 @@ class FestivalStatus(StrEnum):
 
 
 class AttractionResponse(BaseModel):
+    board_id: int | None = Field(default=None, serialization_alias="boardId")
     content_id: str = Field(serialization_alias="contentId")
     name: str
+    name_en: str = Field(serialization_alias="nameEn")
     category: AttractionCategory
+    category_en: str = Field(serialization_alias="categoryEn")
     summary: str
+    summary_en: str = Field(serialization_alias="summaryEn")
     description: str
+    description_en: str = Field(serialization_alias="descriptionEn")
     image: str
     address: str
+    address_en: str = Field(serialization_alias="addressEn")
+
+
+class AttractionPageResponse(BaseModel):
+    items: list[AttractionResponse]
+    total: int
+    page: int
+    size: int
 
 
 class FestivalResponse(BaseModel):
+    board_id: int | None = Field(default=None, serialization_alias="boardId")
     content_id: str = Field(serialization_alias="contentId")
     name: str
+    name_en: str = Field(serialization_alias="nameEn")
     status: FestivalStatus
     place: str
+    place_en: str = Field(serialization_alias="placeEn")
     period: str
+    period_en: str = Field(serialization_alias="periodEn")
     start_date: date | None = Field(default=None, serialization_alias="startDate")
     end_date: date | None = Field(default=None, serialization_alias="endDate")
     image: str
     summary: str
+    summary_en: str = Field(serialization_alias="summaryEn")
+
+
+class FestivalPageResponse(BaseModel):
+    items: list[FestivalResponse]
+    total: int
+    page: int
+    size: int
 
 
 class ErrorResponse(BaseModel):

@@ -4,7 +4,9 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.tag.schema import TagCreate, TagResponse
+from src.api.tag.schema import TagCreate, TagPageResponse, TagResponse
+from src.api.localization import tag_name_en
+from src.core.ids import MAX_PUBLIC_ID
 from src.models.tag import Tag
 
 
@@ -16,14 +18,19 @@ class TagAlreadyExistsError(Exception):
     pass
 
 
-async def get_tags(db: AsyncSession) -> list[TagResponse]:
-    stored = {tag.tag_id: tag for tag in (await db.scalars(select(Tag).order_by(Tag.tag_id))).all()}
-    responses = [TagResponse(tag_id=tag_id, name=name, category=category) for tag_id, (name, category) in DEFAULT_TAGS.items()]
-    for tag_id, tag in stored.items():
-        if tag_id in DEFAULT_TAGS:
-            continue
-        responses.append(TagResponse(tag_id=tag_id, name=tag.name, category="CUSTOM"))
-    return responses
+async def get_tags(db: AsyncSession, page: int, size: int) -> TagPageResponse:
+    offset = (page - 1) * size
+    default_responses = [TagResponse(tag_id=tag_id, name=name, name_en=tag_name_en(tag_id, name), category=category) for tag_id, (name, category) in DEFAULT_TAGS.items()]
+    custom_filter = Tag.tag_id.not_in(DEFAULT_TAGS)
+    custom_total = await db.scalar(select(func.count(Tag.tag_id)).where(custom_filter)) or 0
+    items = default_responses[offset:min(offset + size, len(default_responses))] if offset < len(default_responses) else []
+    custom_offset = max(offset - len(default_responses), 0)
+    custom_size = size - len(items)
+    if custom_size > 0 and custom_offset < custom_total:
+        statement = select(Tag).where(custom_filter).order_by(Tag.tag_id).offset(custom_offset).limit(custom_size)
+        custom_tags = (await db.scalars(statement)).all()
+        items.extend(TagResponse(tag_id=tag.tag_id, name=tag.name, name_en=tag_name_en(tag.tag_id, tag.name), category="CUSTOM") for tag in custom_tags)
+    return TagPageResponse(items=items, total=len(default_responses) + custom_total, page=page, size=size)
 
 
 async def create_tag(db: AsyncSession, payload: TagCreate) -> TagResponse:
@@ -36,7 +43,7 @@ async def create_tag(db: AsyncSession, payload: TagCreate) -> TagResponse:
         if duplicate is not None:
             raise TagAlreadyExistsError
 
-        max_tag_id = await db.scalar(select(func.max(Tag.tag_id))) or 9
+        max_tag_id = await db.scalar(select(func.max(Tag.tag_id)).where(Tag.tag_id <= MAX_PUBLIC_ID)) or 9
         tag = Tag(tag_id=max(max_tag_id, 9) + 1, name=payload.name)
         db.add(tag)
         try:
@@ -44,4 +51,4 @@ async def create_tag(db: AsyncSession, payload: TagCreate) -> TagResponse:
         except IntegrityError:
             await db.rollback()
             raise
-        return TagResponse(tag_id=tag.tag_id, name=tag.name, category="CUSTOM")
+        return TagResponse(tag_id=tag.tag_id, name=tag.name, name_en=tag_name_en(tag.tag_id, tag.name), category="CUSTOM")

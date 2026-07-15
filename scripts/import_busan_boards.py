@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError
 
 from src.core.database import AsyncSessionLocal
+from src.core.ids import MAX_PUBLIC_ID
 from src.models import Board
 
 
@@ -103,7 +104,7 @@ async def import_boards(boards: list[CleanBoard], update_existing: bool) -> tupl
             ) from exc
 
         existing = {(row.name, row.category): row for row in existing_rows}
-        next_id = (await session.scalar(select(func.max(Board.board_id))) or 0) + 1
+        next_id = (await session.scalar(select(func.max(Board.board_id)).where(Board.board_id > 0, Board.board_id <= MAX_PUBLIC_ID)) or 0) + 1
         inserted = 0
         updated = 0
         unchanged = 0

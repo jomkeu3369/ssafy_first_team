@@ -135,6 +135,18 @@ curl.exe -X POST "https://YOUR-SERVICE.onrender.com/api/v1/admin/data-import/boa
 
 `GET /api/v1/search?q=해운대&page=1&size=20`은 보드 이름·설명·카테고리와 게시글 제목·본문·태그명을 검색합니다. 결과의 `resultType`은 `BOARD` 또는 `POST`입니다.
 
+보드·관광지·축제·댓글·태그 목록 GET API도 `page`와 `size`를 받으며 기본값은 `page=1`, `size=20`, 최대 크기는 `100`입니다. 응답은 `{"items":[],"total":0,"page":1,"size":20}` 형식입니다. 댓글은 부모 댓글을 페이지 단위로 조회하고 각 부모의 대댓글을 `children`에 함께 반환합니다.
+
+챗봇은 로컬 SQL 및 문서 검색 결과가 없거나 질문의 일부만 답할 수 있을 정도로 부족하면 별도 확인 없이 Tavily 웹 검색을 자동 실행합니다.
+
+보드·관광지·축제·태그 응답은 `nameEn`을 포함하며 유형별로 `descriptionEn`, `summaryEn`, `categoryEn`, `addressEn`, `placeEn`, `periodEn`을 제공합니다. 영문 원본이 없는 고유명사와 주소는 한국어 원문을 폴백으로 사용합니다. 관광지와 축제 응답의 `boardId`는 같은 이름과 카테고리로 가져온 커뮤니티 보드를 가리킵니다.
+
+`GET /api/v1/posts/popular?page=1&size=10`은 모든 게시판의 게시글을 좋아요·댓글·조회 수 순으로 통합 조회합니다.
+
+## ID 발급 규칙
+
+보드·게시글·댓글·미디어·사용자 정의 태그 ID는 작은 순차 번호로 발급합니다. 명세에 고정된 전체 자유게시판 `boardId=0`과 기본 태그 `tagId=1~9`는 유지합니다. 이전 버전에서 생성된 JavaScript 안전 정수 범위를 초과하는 난수 ID는 서버 시작 시 한 번 순차 번호로 변환하며 관련 외래키도 함께 변경합니다.
+
 ## 개발 명령
 
 ```powershell

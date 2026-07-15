@@ -27,7 +27,7 @@ async def test_create_board_and_reject_duplicate() -> None:
 
     async with session_factory() as session:
         board = await create_board(session, payload)
-        assert 0 < board.board_id < 2**63
+        assert board.board_id == 1
         assert board.name == "테스트 게시판"
         assert BoardResponse.model_validate(board).model_dump(by_alias=True)["boardId"] == board.board_id
 
@@ -47,12 +47,13 @@ async def test_get_boards_and_detail_include_derived_fields() -> None:
         session.add(Media(media_id=1, post_id=11, image_url="https://example.com/image.jpg", sequence=1))
         await session.commit()
 
-        boards = await get_boards(session)
+        boards = await get_boards(session, 1, 1)
         detail = await get_board(session, 1)
         free_board = await get_board(session, 0)
         missing = await get_board(session, 999)
 
-    assert len(boards) == 2
+    assert boards.total == 2
+    assert len(boards.items) == 1
     assert detail is not None
     assert detail.recent_post_count == 2
     assert detail.recent_excerpt == "최신 글"
@@ -80,15 +81,20 @@ async def test_board_api_matches_spec() -> None:
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         created = await client.post("/api/v1/boards", json=payload)
         duplicate = await client.post("/api/v1/boards", json=payload)
-        listed = await client.get("/api/v1/boards")
+        listed = await client.get("/api/v1/boards", params={"page": 1, "size": 20})
+        invalid_page = await client.get("/api/v1/boards", params={"page": 0, "size": 101})
         detail = await client.get(f"/api/v1/boards/{created.json()['boardId']}")
         missing = await client.get("/api/v1/boards/999")
 
     assert created.status_code == 201
-    assert set(created.json()) == {"boardId", "name", "category", "description", "image", "recentPostCount", "lastActivityAt", "recentExcerpt"}
+    assert set(created.json()) == {"boardId", "name", "nameEn", "category", "categoryEn", "description", "descriptionEn", "image", "recentPostCount", "lastActivityAt", "recentExcerpt"}
+    assert created.json()["nameEn"] == "해운대 게시판"
+    assert created.json()["categoryEn"] == "Haeundae"
     assert duplicate.status_code == 409
     assert duplicate.json() == {"message": "같은 이름과 카테고리의 게시판이 이미 존재합니다."}
-    assert listed.status_code == 200 and listed.json() == [created.json()]
+    assert listed.status_code == 200
+    assert listed.json() == {"items": [created.json()], "total": 1, "page": 1, "size": 20}
+    assert invalid_page.status_code == 422
     assert detail.status_code == 200 and detail.json() == created.json()
     assert missing.status_code == 404
     assert missing.json() == {"message": "게시판을 찾을 수 없습니다."}

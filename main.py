@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         schema_updated = await ensure_database_compatibility()
         if schema_updated:
-            logger.info("Added the missing Board.image column")
+            logger.info("Applied database compatibility updates")
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
         try:

@@ -1,13 +1,13 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, Header, Path, Response, status
+from fastapi import APIRouter, Body, Depends, Header, Path, Query, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.comment import crud
-from src.api.comment.schema import CommentCreate, CommentDelete, CommentResponse, CommentUpdate, ErrorResponse
+from src.api.comment.schema import CommentCreate, CommentDelete, CommentPageResponse, CommentResponse, CommentUpdate, ErrorResponse
 from src.core.database import get_db_session
 
 
@@ -18,10 +18,10 @@ def _error(status_code: int, message: str) -> JSONResponse:
     return JSONResponse(status_code=status_code, content={"message": message})
 
 
-@router.get("/posts/{post_id}/comments", response_model=list[CommentResponse], response_model_by_alias=True, responses={404: {"model": ErrorResponse}})
-async def get_comments(post_id: Annotated[int, Path(ge=1)], db: Annotated[AsyncSession, Depends(get_db_session)]) -> list[CommentResponse] | JSONResponse:
+@router.get("/posts/{post_id}/comments", response_model=CommentPageResponse, response_model_by_alias=True, responses={404: {"model": ErrorResponse}})
+async def get_comments(post_id: Annotated[int, Path(ge=1)], db: Annotated[AsyncSession, Depends(get_db_session)], page: Annotated[int, Query(ge=1)] = 1, size: Annotated[int, Query(ge=1, le=100)] = 20) -> CommentPageResponse | JSONResponse:
     try:
-        return await crud.get_comments(db, post_id)
+        return await crud.get_comments(db, post_id, page, size)
     except crud.PostNotFoundError:
         return _error(status.HTTP_404_NOT_FOUND, "게시글을 찾을 수 없습니다.")
 

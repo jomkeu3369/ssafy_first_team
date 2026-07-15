@@ -18,6 +18,9 @@ def test_system_prompt_contains_scope_gate() -> None:
     assert "Apply the scope gate before answering or calling any tool" in SYSTEM_PROMPT
     assert "do not call any tool" in SYSTEM_PROMPT
     assert "부산 지역 정보와 관련 질문만" in SYSTEM_PROMPT
+    assert "you must automatically call" in SYSTEM_PROMPT
+    assert "Do not ask the user for permission first" in SYSTEM_PROMPT
+    assert "until web search has also been attempted" in SYSTEM_PROMPT
 
 
 def test_reference_extraction_from_tool_message() -> None:

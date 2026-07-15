@@ -10,7 +10,15 @@ class TagCreate(BaseModel):
 class TagResponse(BaseModel):
     tag_id: int = Field(serialization_alias="tagId")
     name: str
+    name_en: str = Field(serialization_alias="nameEn")
     category: str
+
+
+class TagPageResponse(BaseModel):
+    items: list[TagResponse]
+    total: int
+    page: int
+    size: int
 
 
 class ErrorResponse(BaseModel):

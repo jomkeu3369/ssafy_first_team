@@ -66,6 +66,7 @@ class PasswordVerifyResponse(BaseModel):
 class TagResponse(BaseModel):
     tag_id: int = Field(serialization_alias="tagId")
     name: str
+    name_en: str = Field(serialization_alias="nameEn")
     category: str
 
 

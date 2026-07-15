@@ -1,11 +1,11 @@
 import asyncio
-import secrets
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.board.schema import BoardCreate, BoardResponse
+from src.api.board.schema import BoardCreate, BoardPageResponse, BoardResponse
+from src.core.ids import MAX_PUBLIC_ID
 from src.models.board import Board
 from src.models.media import Media
 from src.models.post import Post
@@ -18,8 +18,8 @@ class BoardAlreadyExistsError(Exception):
 _board_write_lock = asyncio.Lock()
 
 
-def _generate_board_id() -> int:
-    return secrets.randbelow(2**63 - 1) + 1
+async def _next_board_id(db: AsyncSession) -> int:
+    return (await db.scalar(select(func.max(Board.board_id)).where(Board.board_id > 0, Board.board_id <= MAX_PUBLIC_ID)) or 0) + 1
 
 
 def _board_select():
@@ -40,11 +40,7 @@ async def create_board(db: AsyncSession, board_create: BoardCreate) -> Board:
         if await db.scalar(duplicate_statement) is not None:
             raise BoardAlreadyExistsError
 
-        board_id = _generate_board_id()
-        while await db.get(Board, board_id) is not None:
-            board_id = _generate_board_id()
-
-        board = Board(board_id=board_id, **board_create.model_dump())
+        board = Board(board_id=await _next_board_id(db), **board_create.model_dump())
         db.add(board)
 
         try:
@@ -57,10 +53,11 @@ async def create_board(db: AsyncSession, board_create: BoardCreate) -> Board:
         return board
 
 
-async def get_boards(db: AsyncSession) -> list[BoardResponse]:
-    statement = _board_select().order_by(Board.category, Board.name, Board.board_id)
+async def get_boards(db: AsyncSession, page: int, size: int) -> BoardPageResponse:
+    total = await db.scalar(select(func.count(Board.board_id))) or 0
+    statement = _board_select().order_by(Board.category, Board.name, Board.board_id).offset((page - 1) * size).limit(size)
     rows = (await db.execute(statement)).all()
-    return [_to_response(row) for row in rows]
+    return BoardPageResponse(items=[_to_response(row) for row in rows], total=total, page=page, size=size)
 
 
 async def get_board(db: AsyncSession, board_id: int) -> BoardResponse | None:

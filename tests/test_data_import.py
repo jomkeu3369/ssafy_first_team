@@ -74,6 +74,7 @@ async def test_protected_import_inserts_updates_and_skips_duplicates() -> None:
 
     async with session_factory() as session:
         assert await session.scalar(select(func.count(Board.board_id))) == 2
+        assert list((await session.scalars(select(Board.board_id).order_by(Board.board_id))).all()) == [1, 2]
         board = (await session.scalars(select(Board).where(Board.name == "해운대 해수욕장"))).one()
         assert board.description == "주소: 부산 해운대구 우동"
         assert board.image == "https://example.com/updated.jpg"

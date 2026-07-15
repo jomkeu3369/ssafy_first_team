@@ -1,5 +1,4 @@
 import asyncio
-import secrets
 from pathlib import Path
 
 from fastapi import UploadFile
@@ -37,7 +36,7 @@ def _validate_signature(content_type: str, content: bytes) -> str:
     return extension
 
 
-async def save_image(file: UploadFile, media_root: Path) -> tuple[int, str]:
+async def save_image(file: UploadFile, media_root: Path, starting_id: int) -> tuple[int, str]:
     content_type = file.content_type or ""
     content = bytearray()
     while chunk := await file.read(CHUNK_SIZE):
@@ -50,10 +49,10 @@ async def save_image(file: UploadFile, media_root: Path) -> tuple[int, str]:
 
     media_root.mkdir(parents=True, exist_ok=True)
     async with _media_write_lock:
-        media_id = secrets.randbelow(2**63 - 1) + 1
+        media_id = max(starting_id, 1)
         destination = media_root / f"{media_id}{extension}"
-        while destination.exists():
-            media_id = secrets.randbelow(2**63 - 1) + 1
+        while any(media_root.glob(f"{media_id}.*")):
+            media_id += 1
             destination = media_root / f"{media_id}{extension}"
         await asyncio.to_thread(destination.write_bytes, bytes(content))
     return media_id, destination.name

@@ -35,5 +35,12 @@ class CommentResponse(BaseModel):
     children: list["CommentResponse"] = Field(default_factory=list)
 
 
+class CommentPageResponse(BaseModel):
+    items: list[CommentResponse]
+    total: int
+    page: int
+    size: int
+
+
 class ErrorResponse(BaseModel):
     message: str

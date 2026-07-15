@@ -1,5 +1,4 @@
 import asyncio
-import secrets
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -8,7 +7,9 @@ from sqlalchemy.orm import selectinload
 
 from src.api.post.passwords import hash_password, verify_password
 from src.api.post.schema import MediaResponse, PostPageResponse, PostResponse, PostSort, PostWrite, TagResponse, tag_category
+from src.api.localization import tag_name_en
 from src.api.tag.crud import DEFAULT_TAGS
+from src.core.ids import MAX_PUBLIC_ID
 from src.models.board import Board
 from src.models.comment import Comment
 from src.models.media import Media
@@ -43,8 +44,8 @@ _view_lock = asyncio.Lock()
 _viewed_clients: set[tuple[int, str]] = set()
 
 
-def _generate_post_id() -> int:
-    return secrets.randbelow(2**63 - 1) + 1
+async def _next_post_id(db: AsyncSession) -> int:
+    return (await db.scalar(select(func.max(Post.post_id)).where(Post.post_id > 0, Post.post_id <= MAX_PUBLIC_ID)) or 0) + 1
 
 
 def _comment_count():
@@ -57,7 +58,7 @@ def _post_select():
 
 def _to_response(row) -> PostResponse:
     post = row[0]
-    tags = [TagResponse(tag_id=tag.tag_id, name=tag.name, category=tag_category(tag.tag_id)) for tag in sorted(post.tags, key=lambda item: item.tag_id)]
+    tags = [TagResponse(tag_id=tag.tag_id, name=tag.name, name_en=tag_name_en(tag.tag_id, tag.name), category=tag_category(tag.tag_id)) for tag in sorted(post.tags, key=lambda item: item.tag_id)]
     media = [MediaResponse(media_id=item.media_id, image_url=item.image_url) for item in post.media]
     return PostResponse(post_id=post.post_id, board_id=post.board_id, title=post.title, author=post.author, content=post.content, view_count=post.view_count, like_count=post.like_count, comment_count=row.comment_count or 0, created_at=None, updated_at=None, tags=tags, media=media)
 
@@ -112,29 +113,33 @@ async def get_posts(db: AsyncSession, board_id: int, keyword: str | None, sort: 
     return PostPageResponse(items=[_to_response(row) for row in rows], total=total, page=page, size=size)
 
 
+async def get_popular_posts(db: AsyncSession, page: int, size: int) -> PostPageResponse:
+    total = await db.scalar(select(func.count(Post.post_id))) or 0
+    comment_count = _comment_count()
+    statement = _post_select().order_by(Post.like_count.desc(), comment_count.desc(), Post.view_count.desc(), Post.post_id.desc()).offset((page - 1) * size).limit(size)
+    rows = (await db.execute(statement)).all()
+    return PostPageResponse(items=[_to_response(row) for row in rows], total=total, page=page, size=size)
+
+
 async def create_post(db: AsyncSession, board_id: int, payload: PostWrite, author: str) -> PostResponse:
     if await db.get(Board, board_id) is None:
         raise BoardNotFoundError
 
     async with _post_write_lock:
-        post_id = _generate_post_id()
-        while await db.get(Post, post_id) is not None:
-            post_id = _generate_post_id()
-
         tags = await _resolve_tags(db, payload)
-        post = Post(post_id=post_id, board_id=board_id, title=payload.title, author=author, content=payload.content, password=hash_password(payload.password), view_count=0, like_count=0)
+        post = Post(post_id=await _next_post_id(db), board_id=board_id, title=payload.title, author=author, content=payload.content, password=hash_password(payload.password), view_count=0, like_count=0)
         post.tags = tags
         db.add(post)
 
         try:
             await db.flush()
-            await _replace_media(db, post_id, payload)
+            await _replace_media(db, post.post_id, payload)
             await db.commit()
         except (IntegrityError, MediaConflictError):
             await db.rollback()
             raise
 
-    result = await get_post(db, post_id)
+    result = await get_post(db, post.post_id)
     if result is None:
         raise PostNotFoundError
     return result

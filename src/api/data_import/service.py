@@ -1,7 +1,6 @@
 import asyncio
 import json
 import re
-import secrets
 from dataclasses import dataclass
 from typing import Any
 
@@ -97,29 +96,28 @@ async def clean_uploads(files: list[UploadFile]) -> tuple[list[CleanBoard], int,
     return boards, skipped, categories
 
 
-def _new_board_id(occupied: set[int]) -> int:
-    board_id = secrets.randbelow(2**63 - 1) + 1
-    while board_id in occupied:
-        board_id = secrets.randbelow(2**63 - 1) + 1
-    occupied.add(board_id)
-    return board_id
-
-
 async def import_boards(db: AsyncSession, files: list[UploadFile], update_existing: bool) -> ImportResponse:
     boards, skipped, categories = await clean_uploads(files)
     async with _import_lock:
         existing_rows = list((await db.scalars(select(Board))).all())
         existing = {(row.name, row.category): row for row in existing_rows}
         occupied = {row.board_id for row in existing_rows}
+        next_board_id = 1
+        while next_board_id in occupied:
+            next_board_id += 1
         inserted = 0
         updated = 0
         unchanged = 0
         for item in boards:
             row = existing.get((item.name, item.category))
             if row is None:
-                row = Board(board_id=_new_board_id(occupied), name=item.name, category=item.category, description=item.description, image=item.image)
+                row = Board(board_id=next_board_id, name=item.name, category=item.category, description=item.description, image=item.image)
                 db.add(row)
                 existing[(item.name, item.category)] = row
+                occupied.add(next_board_id)
+                next_board_id += 1
+                while next_board_id in occupied:
+                    next_board_id += 1
                 inserted += 1
             elif update_existing and (row.description != item.description or row.image != item.image):
                 row.description = item.description

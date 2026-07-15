@@ -29,6 +29,11 @@ async def get_posts(board_id: Annotated[int, Path(ge=0)], db: Annotated[AsyncSes
         return _error(status.HTTP_404_NOT_FOUND, "게시판을 찾을 수 없습니다.")
 
 
+@router.get("/posts/popular", response_model=PostPageResponse, response_model_by_alias=True)
+async def get_popular_posts(db: Annotated[AsyncSession, Depends(get_db_session)], page: Annotated[int, Query(ge=1)] = 1, size: Annotated[int, Query(ge=1, le=100)] = 10) -> PostPageResponse:
+    return await crud.get_popular_posts(db, page, size)
+
+
 @router.get("/posts/{post_id}", response_model=PostResponse, response_model_by_alias=True, responses={404: {"model": ErrorResponse}})
 async def get_post(post_id: Annotated[int, Path(ge=0)], client_id: Annotated[UUID, Header(alias="X-Client-Id")], db: Annotated[AsyncSession, Depends(get_db_session)]) -> PostResponse | JSONResponse:
     try:
