@@ -203,6 +203,12 @@ Board는 DB와 API 응답에서 `nameKr/nameEn`, `categoryKr/categoryEn`, `descr
 
 댓글과 대댓글도 `contentKr/contentEn`을 함께 저장하고 응답합니다. 한국어 또는 영어 댓글의 생성·수정은 GPT 번역이 성공한 경우에만 커밋됩니다. 기존 댓글은 `POST /api/v1/admin/data-import/comment-translations?limit=20`을 `remainingCount`가 0이 될 때까지 호출해 번역할 수 있습니다.
 
+기존 댓글 전체 번역은 PowerShell에서 다음 스크립트로 실행할 수 있습니다.
+
+```powershell
+.\scripts\translate_comments.ps1 -ImportKey "YOUR_DATA_IMPORT_API_KEY"
+```
+
 `GET /api/v1/posts/popular?page=1&size=10`은 모든 게시판의 게시글을 좋아요·댓글·조회 수 순으로 통합 조회합니다.
 
 ## Render DB 영속 배포
