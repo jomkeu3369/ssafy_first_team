@@ -29,7 +29,7 @@ async def test_database_compatibility_adds_board_tourism_columns_once() -> None:
 
     async with target_engine.connect() as connection:
         columns = await connection.run_sync(_column_names)
-    assert {"nameEn", "descriptionEn", "image", "contentId", "address", "addressEn", "eventStartDate", "eventEndDate", "eventPlace", "eventPlaceEn"} <= columns
+    assert {"nameKr", "nameEn", "categoryKr", "categoryEn", "descriptionKr", "descriptionEn", "image", "contentId", "address", "addressEn", "eventStartDate", "eventEndDate", "eventPlace", "eventPlaceEn"} <= columns
     await target_engine.dispose()
 
 
@@ -58,7 +58,7 @@ async def test_database_compatibility_adds_post_translation_columns_once() -> No
 async def test_database_compatibility_keeps_normal_sequence_gaps() -> None:
     target_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with target_engine.begin() as connection:
-        await connection.execute(text('CREATE TABLE "Board" ("boardId" BIGINT PRIMARY KEY, name VARCHAR NOT NULL, "nameEn" VARCHAR, category VARCHAR NOT NULL, description VARCHAR, "descriptionEn" VARCHAR, image VARCHAR, "contentId" VARCHAR, address VARCHAR, "addressEn" VARCHAR, "eventStartDate" VARCHAR, "eventEndDate" VARCHAR, "eventPlace" VARCHAR, "eventPlaceEn" VARCHAR)'))
+        await connection.execute(text('CREATE TABLE "Board" ("boardId" BIGINT PRIMARY KEY, name VARCHAR NOT NULL, "nameKr" VARCHAR, "nameEn" VARCHAR, category VARCHAR NOT NULL, "categoryKr" VARCHAR, "categoryEn" VARCHAR, description VARCHAR, "descriptionKr" VARCHAR, "descriptionEn" VARCHAR, image VARCHAR, "contentId" VARCHAR, address VARCHAR, "addressEn" VARCHAR, "eventStartDate" VARCHAR, "eventEndDate" VARCHAR, "eventPlace" VARCHAR, "eventPlaceEn" VARCHAR)'))
         await connection.execute(text('INSERT INTO "Board" ("boardId", name, category) VALUES (1, \'첫 번째\', \'FREE\'), (3, \'세 번째\', \'FREE\')'))
 
     assert await ensure_database_compatibility(target_engine) is False

@@ -199,7 +199,7 @@ curl.exe -X POST "https://YOUR-SERVICE.onrender.com/api/v1/admin/data-import/boa
 
 챗봇은 로컬 SQL 및 문서 검색 결과가 없거나 질문의 일부만 답할 수 있을 정도로 부족하면 별도 확인 없이 Tavily 웹 검색을 자동 실행합니다.
 
-보드·관광지·축제·태그 응답은 `nameEn`을 포함하며 유형별로 `descriptionEn`, `summaryEn`, `categoryEn`, `addressEn`, `placeEn`, `periodEn`을 제공합니다. 영문 원본이 없는 필드는 한국어를 잘못 복사하지 않고 빈 값으로 제공하며, 관리자 번역 API로 영문 값을 채울 수 있습니다. 관광지와 축제 응답의 `boardId`는 가져오기 API가 생성하거나 갱신한 같은 Board 행을 가리킵니다.
+Board는 DB와 API 응답에서 `nameKr/nameEn`, `categoryKr/categoryEn`, `descriptionKr/descriptionEn`을 명시적으로 분리합니다. 기존 `name/category/description`은 이전 프론트와의 호환을 위해 기존 값을 유지합니다. 새 게시판 생성은 GPT 번역을 완료한 뒤 두 언어를 같은 트랜잭션에 저장합니다. 대량 관광 데이터는 관리자 번역 API로 영문 값을 채우며, 영문 필드에 한글이 포함된 기존 값은 마이그레이션에서 제거되어 다시 번역 대상이 됩니다. 관광지와 축제 응답의 `boardId`는 가져오기 API가 생성하거나 갱신한 같은 Board 행을 가리킵니다.
 
 `GET /api/v1/posts/popular?page=1&size=10`은 모든 게시판의 게시글을 좋아요·댓글·조회 수 순으로 통합 조회합니다.
 

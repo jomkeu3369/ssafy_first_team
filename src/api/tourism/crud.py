@@ -18,25 +18,29 @@ def _content_id(board: Board) -> str:
 
 
 def _to_attraction(board: Board) -> AttractionResponse:
+    name = board.name_kr or board.name
+    description = board.description_kr or board.description
     address = board.address or ""
     name_en = board.name_en or ""
     address_en = board.address_en or ""
-    category = service._attraction_category({"title": board.name, "addr1": address})
-    summary = (board.description or f"부산의 {board.name}입니다.")[:200]
+    category = service._attraction_category({"title": name, "addr1": address})
+    summary = (description or f"부산의 {name}입니다.")[:200]
     summary_en = (board.description_en or (f"{name_en} is a Busan attraction" + (f" located at {address_en}." if address_en else ".") if name_en else ""))[:200]
-    return AttractionResponse(board_id=board.board_id, content_id=_content_id(board), name=board.name, name_en=name_en, category=category, category_en=ATTRACTION_CATEGORY_EN[category.value], summary=summary, summary_en=summary_en, description=board.description or summary, description_en=board.description_en or summary_en, image=board.image or "", address=address, address_en=address_en)
+    return AttractionResponse(board_id=board.board_id, content_id=_content_id(board), name=name, name_en=name_en, category=category, category_en=ATTRACTION_CATEGORY_EN[category.value], summary=summary, summary_en=summary_en, description=description or summary, description_en=board.description_en or summary_en, image=board.image or "", address=address, address_en=address_en)
 
 
 def _to_festival(board: Board, today: date) -> FestivalResponse:
+    name = board.name_kr or board.name
+    description = board.description_kr or board.description
     start_date = service._parse_date(board.event_start_date)
     end_date = service._parse_date(board.event_end_date)
     period = " ~ ".join(value.isoformat() for value in (start_date, end_date) if value is not None)
     place = board.event_place or board.address or ""
     name_en = board.name_en or ""
     place_en = board.event_place_en or board.address_en or ""
-    summary = (board.description or f"부산에서 열리는 {board.name}입니다.")[:200]
+    summary = (description or f"부산에서 열리는 {name}입니다.")[:200]
     summary_en = (board.description_en or (f"{name_en} is a festival held" + (f" at {place_en} in Busan." if place_en else " in Busan.") if name_en else ""))[:200]
-    return FestivalResponse(board_id=board.board_id, content_id=_content_id(board), name=board.name, name_en=name_en, status=service._festival_status(start_date, end_date, today), place=place, place_en=place_en, period=period, period_en=period, start_date=start_date, end_date=end_date, image=board.image or "", summary=summary, summary_en=summary_en)
+    return FestivalResponse(board_id=board.board_id, content_id=_content_id(board), name=name, name_en=name_en, status=service._festival_status(start_date, end_date, today), place=place, place_en=place_en, period=period, period_en=period, start_date=start_date, end_date=end_date, image=board.image or "", summary=summary, summary_en=summary_en)
 
 
 def _content_filter(content_id: str):

@@ -19,9 +19,13 @@ class Board(Base):
 
     board_id: Mapped[int] = mapped_column("boardId", BigInteger, primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    name_kr: Mapped[str | None] = mapped_column("nameKr", String(100), nullable=True)
     name_en: Mapped[str | None] = mapped_column("nameEn", String(200), nullable=True)
     category: Mapped[str] = mapped_column(String(50), nullable=False)
+    category_kr: Mapped[str | None] = mapped_column("categoryKr", String(100), nullable=True)
+    category_en: Mapped[str | None] = mapped_column("categoryEn", String(100), nullable=True)
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    description_kr: Mapped[str | None] = mapped_column("descriptionKr", String(1000), nullable=True)
     description_en: Mapped[str | None] = mapped_column("descriptionEn", String(2000), nullable=True)
     image: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     source_content_id: Mapped[str | None] = mapped_column("contentId", String(100), nullable=True)

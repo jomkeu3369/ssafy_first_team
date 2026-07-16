@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError
 
+from src.api.localization import BOARD_CATEGORY_EN
 from src.core.database import AsyncSessionLocal
 from src.core.ids import MAX_PUBLIC_ID
 from src.models import Board
@@ -123,6 +124,11 @@ def load_boards(source_paths: list[Path]) -> tuple[list[CleanBoard], int]:
 
 def update_board(row: Board, item: CleanBoard) -> bool:
     changed = False
+    localized_values = (("name_kr", item.name), ("category_kr", item.category), ("category_en", BOARD_CATEGORY_EN.get(item.category, item.category)), ("description_kr", item.description))
+    for attribute, value in localized_values:
+        if getattr(row, attribute) != value:
+            setattr(row, attribute, value)
+            changed = True
     values = (("image", item.image), ("source_content_id", item.source_content_id), ("event_start_date", item.event_start_date), ("event_end_date", item.event_end_date))
     for attribute, value in values:
         if getattr(row, attribute) != value:
@@ -164,9 +170,13 @@ async def import_boards(boards: list[CleanBoard], update_existing: bool) -> tupl
                 row = Board(
                     board_id=next_id,
                     name=item.name,
+                    name_kr=item.name,
                     name_en=item.name_en,
                     category=item.category,
+                    category_kr=item.category,
+                    category_en=BOARD_CATEGORY_EN.get(item.category, item.category),
                     description=item.description,
+                    description_kr=item.description,
                     description_en=item.description_en,
                     image=item.image,
                     source_content_id=item.source_content_id,

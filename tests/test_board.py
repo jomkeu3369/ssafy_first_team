@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from src.api.board.crud import BoardAlreadyExistsError, create_board, get_board, get_boards
 from src.api.board.router import router
 from src.api.board.schema import BoardCreate, BoardResponse
+from src.api.data_import.translation import TranslatedBoard, get_board_translator
 from src.core.database import get_db_session
 from src.models import Base
 from src.models.board import Board
@@ -20,20 +21,37 @@ async def _database():
     return engine, async_sessionmaker(engine, expire_on_commit=False)
 
 
+class FakeBoardTranslator:
+    async def translate(self, boards: list[Board]) -> list[TranslatedBoard]:
+        return [TranslatedBoard(board_id=board.board_id, name_en="Haeundae Board", description_en="Description" if board.description else None, address_en=None, event_place_en=None) for board in boards]
+
+
+def test_board_response_never_exposes_korean_as_english() -> None:
+    response = BoardResponse(board_id=12, name="168계단", name_en="168계단", category="관광지", description="주소: 부산광역시 동구", description_en="Address: 부산광역시 동구")
+    payload = response.model_dump(by_alias=True)
+
+    assert payload["nameKr"] == "168계단"
+    assert payload["nameEn"] == ""
+    assert payload["categoryKr"] == "관광지"
+    assert payload["categoryEn"] == "Attractions"
+    assert payload["descriptionKr"] == "주소: 부산광역시 동구"
+    assert payload["descriptionEn"] is None
+
+
 @pytest.mark.asyncio
 async def test_create_board_and_reject_duplicate() -> None:
     engine, session_factory = await _database()
     payload = BoardCreate(name="  테스트 게시판  ", category="HAEUNDAE", description="설명")
 
     async with session_factory() as session:
-        board = await create_board(session, payload)
+        board = await create_board(session, payload, FakeBoardTranslator())
         assert board.board_id == 1
         assert board.name == "테스트 게시판"
         assert BoardResponse.model_validate(board).model_dump(by_alias=True)["boardId"] == board.board_id
 
     async with session_factory() as session:
         with pytest.raises(BoardAlreadyExistsError):
-            await create_board(session, payload)
+            await create_board(session, payload, FakeBoardTranslator())
 
     await engine.dispose()
 
@@ -75,6 +93,7 @@ async def test_board_api_matches_spec() -> None:
             yield session
 
     app.dependency_overrides[get_db_session] = override_session
+    app.dependency_overrides[get_board_translator] = FakeBoardTranslator
     transport = ASGITransport(app=app)
     payload = {"name": "해운대 게시판", "category": "HAEUNDAE", "description": "설명"}
 
@@ -87,9 +106,14 @@ async def test_board_api_matches_spec() -> None:
         missing = await client.get("/api/v1/boards/999")
 
     assert created.status_code == 201
-    assert set(created.json()) == {"boardId", "name", "nameEn", "category", "categoryEn", "description", "descriptionEn", "image", "recentPostCount", "lastActivityAt", "recentExcerpt"}
-    assert created.json()["nameEn"] == ""
+    assert set(created.json()) == {"boardId", "name", "nameKr", "nameEn", "category", "categoryKr", "categoryEn", "description", "descriptionKr", "descriptionEn", "image", "recentPostCount", "lastActivityAt", "recentExcerpt"}
+    assert created.json()["nameKr"] == "해운대 게시판"
+    assert created.json()["nameEn"] == "Haeundae Board"
+    assert created.json()["category"] == "HAEUNDAE"
+    assert created.json()["categoryKr"] == "해운대"
     assert created.json()["categoryEn"] == "Haeundae"
+    assert created.json()["descriptionKr"] == "설명"
+    assert created.json()["descriptionEn"] == "Description"
     assert duplicate.status_code == 409
     assert duplicate.json() == {"message": "같은 이름과 카테고리의 게시판이 이미 존재합니다."}
     assert listed.status_code == 200

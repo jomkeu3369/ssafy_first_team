@@ -64,11 +64,11 @@ async def load_search_documents(target_engine: AsyncEngine = engine) -> tuple[li
     async with target_engine.connect() as connection:
         tables = {row[0] for row in await connection.execute(text("SELECT name FROM sqlite_master WHERE type = 'table'"))}
         if "Board" in tables:
-            board_rows = await connection.execute(text('SELECT "boardId", name, "nameEn", category, description, "descriptionEn", image, address, "addressEn", "eventStartDate", "eventEndDate", "eventPlace", "eventPlaceEn" FROM "Board" ORDER BY "boardId"'))
+            board_rows = await connection.execute(text('SELECT "boardId", name, "nameKr", "nameEn", category, "categoryKr", "categoryEn", description, "descriptionKr", "descriptionEn", image, address, "addressEn", "eventStartDate", "eventEndDate", "eventPlace", "eventPlaceEn" FROM "Board" ORDER BY "boardId"'))
             for row in board_rows.mappings():
-                fields = [f"장소명: {row['name']}", f"카테고리: {row['category']}"]
+                fields = [f"한국어 장소명: {row['nameKr'] or row['name']}", f"한국어 카테고리: {row['categoryKr'] or row['category']}"]
                 fields.extend(f"{label}: {row[key]}" for label, key in (("주소", "address"), ("설명", "description"), ("행사 시작일", "eventStartDate"), ("행사 종료일", "eventEndDate"), ("행사 장소", "eventPlace")) if row[key])
-                fields.extend(f"{label}: {row[key]}" for label, key in (("English name", "nameEn"), ("English address", "addressEn"), ("English description", "descriptionEn"), ("English venue", "eventPlaceEn")) if row[key])
+                fields.extend(f"{label}: {row[key]}" for label, key in (("한국어 설명", "descriptionKr"), ("English name", "nameEn"), ("English category", "categoryEn"), ("English address", "addressEn"), ("English description", "descriptionEn"), ("English venue", "eventPlaceEn")) if row[key])
                 documents.append(_document("\n".join(fields), "Board", row["boardId"], row["name"], row["address"], row["image"], row["category"]))
         if "post" in tables:
             tags_expression = '(SELECT GROUP_CONCAT(t.name, ", ") FROM "Post_Tags" pt JOIN "Tag" t ON t."tagId" = pt."tagId" WHERE pt."postId" = p."postId")' if {"Post_Tags", "Tag"} <= tables else "NULL"

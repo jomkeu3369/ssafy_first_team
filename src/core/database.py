@@ -93,7 +93,7 @@ async def _normalize_sqlite_ids(connection) -> bool:
 
 async def _apply_compatibility_updates(connection, normalize_ids: bool) -> bool:
     changed = False
-    compatibility_columns = {"Board": {"nameEn": "VARCHAR(200) NULL", "descriptionEn": "VARCHAR(2000) NULL", "image": "VARCHAR(2000) NULL", "contentId": "VARCHAR(100) NULL", "address": "VARCHAR(500) NULL", "addressEn": "VARCHAR(1000) NULL", "eventStartDate": "VARCHAR(8) NULL", "eventEndDate": "VARCHAR(8) NULL", "eventPlace": "VARCHAR(500) NULL", "eventPlaceEn": "VARCHAR(1000) NULL"}, "post": {"titleKr": "VARCHAR(500) NULL", "titleEn": "VARCHAR(500) NULL", "contentKr": "TEXT NULL", "contentEn": "TEXT NULL", "createdAt": "DATETIME NULL", "updatedAt": "DATETIME NULL"}}
+    compatibility_columns = {"Board": {"nameKr": "VARCHAR(100) NULL", "nameEn": "VARCHAR(200) NULL", "categoryKr": "VARCHAR(100) NULL", "categoryEn": "VARCHAR(100) NULL", "descriptionKr": "VARCHAR(1000) NULL", "descriptionEn": "VARCHAR(2000) NULL", "image": "VARCHAR(2000) NULL", "contentId": "VARCHAR(100) NULL", "address": "VARCHAR(500) NULL", "addressEn": "VARCHAR(1000) NULL", "eventStartDate": "VARCHAR(8) NULL", "eventEndDate": "VARCHAR(8) NULL", "eventPlace": "VARCHAR(500) NULL", "eventPlaceEn": "VARCHAR(1000) NULL"}, "post": {"titleKr": "VARCHAR(500) NULL", "titleEn": "VARCHAR(500) NULL", "contentKr": "TEXT NULL", "contentEn": "TEXT NULL", "createdAt": "DATETIME NULL", "updatedAt": "DATETIME NULL"}}
     for table, missing_columns in compatibility_columns.items():
         columns = await connection.run_sync(_columns, table)
         if columns is None:

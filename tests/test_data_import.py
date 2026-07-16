@@ -88,6 +88,10 @@ async def test_protected_import_inserts_updates_and_skips_duplicates() -> None:
         assert list((await session.scalars(select(Board.board_id).order_by(Board.board_id))).all()) == [1, 2]
         board = (await session.scalars(select(Board).where(Board.name == "해운대 해수욕장"))).one()
         assert board.description == "주소: 부산 해운대구 우동"
+        assert board.name_kr == "해운대 해수욕장"
+        assert board.category_kr == "관광지"
+        assert board.category_en == "Attractions"
+        assert board.description_kr == "주소: 부산 해운대구 우동"
         assert board.image == "https://example.com/updated.jpg"
         assert board.source_content_id == "place-1"
         assert board.address == "부산 해운대구 우동"

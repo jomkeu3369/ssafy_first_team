@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.data_import.schema import BoardTranslationResponse, FaissIndexResponse, FaissIndexStatusResponse, ImportResponse
 from src.api.data_import.translation import BoardTranslator
+from src.api.localization import BOARD_CATEGORY_EN
 from src.core.config import get_settings
 from src.mcp_servers.faiss_store import ensure_vector_store, vector_store_status
 from src.models.board import Board
@@ -134,7 +135,7 @@ async def import_boards(db: AsyncSession, files: list[UploadFile], update_existi
         for item in boards:
             row = existing.get((item.name, item.category))
             if row is None:
-                row = Board(board_id=next_board_id, name=item.name, name_en=item.name_en, category=item.category, description=item.description, description_en=item.description_en, image=item.image, source_content_id=item.source_content_id, address=item.address, address_en=item.address_en, event_start_date=item.event_start_date, event_end_date=item.event_end_date, event_place=item.event_place, event_place_en=item.event_place_en)
+                row = Board(board_id=next_board_id, name=item.name, name_kr=item.name, name_en=item.name_en, category=item.category, category_kr=item.category, category_en=BOARD_CATEGORY_EN[item.category], description=item.description, description_kr=item.description, description_en=item.description_en, image=item.image, source_content_id=item.source_content_id, address=item.address, address_en=item.address_en, event_start_date=item.event_start_date, event_end_date=item.event_end_date, event_place=item.event_place, event_place_en=item.event_place_en)
                 db.add(row)
                 existing[(item.name, item.category)] = row
                 occupied.add(next_board_id)
@@ -152,6 +153,11 @@ async def import_boards(db: AsyncSession, files: list[UploadFile], update_existi
 
 def _update_board(row: Board, item: CleanBoard) -> bool:
     changed = False
+    localized_values = (("name_kr", item.name), ("category_kr", item.category), ("category_en", BOARD_CATEGORY_EN[item.category]), ("description_kr", item.description))
+    for attribute, value in localized_values:
+        if getattr(row, attribute) != value:
+            setattr(row, attribute, value)
+            changed = True
     values = (("image", item.image), ("source_content_id", item.source_content_id), ("event_start_date", item.event_start_date), ("event_end_date", item.event_end_date))
     for attribute, value in values:
         if getattr(row, attribute) != value:
@@ -173,7 +179,7 @@ def _update_board(row: Board, item: CleanBoard) -> bool:
 
 
 def _needs_translation():
-    return or_(Board.name_en.is_(None), Board.name_en == "", and_(Board.description.is_not(None), or_(Board.description_en.is_(None), Board.description_en == "")), and_(Board.address.is_not(None), or_(Board.address_en.is_(None), Board.address_en == "")), and_(Board.event_place.is_not(None), or_(Board.event_place_en.is_(None), Board.event_place_en == "")))
+    return or_(Board.name_en.is_(None), Board.name_en == "", and_(Board.description_kr.is_not(None), or_(Board.description_en.is_(None), Board.description_en == "")), and_(Board.address.is_not(None), or_(Board.address_en.is_(None), Board.address_en == "")), and_(Board.event_place.is_not(None), or_(Board.event_place_en.is_(None), Board.event_place_en == "")))
 
 
 async def translate_missing_boards(db: AsyncSession, translator: BoardTranslator, limit: int) -> BoardTranslationResponse:
