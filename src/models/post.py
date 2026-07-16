@@ -26,8 +26,12 @@ class Post(Base):
         nullable=False,
     )
     title: Mapped[str] = mapped_column(String, nullable=False)
+    title_kr: Mapped[str | None] = mapped_column("titleKr", String(500), nullable=True)
+    title_en: Mapped[str | None] = mapped_column("titleEn", String(500), nullable=True)
     author: Mapped[str] = mapped_column(String, nullable=False, comment="UUID")
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_kr: Mapped[str | None] = mapped_column("contentKr", Text, nullable=True)
+    content_en: Mapped[str | None] = mapped_column("contentEn", Text, nullable=True)
     password: Mapped[str] = mapped_column(String, nullable=False)
     view_count: Mapped[int] = mapped_column("viewCount", Integer, nullable=False)
     like_count: Mapped[int] = mapped_column("likeCount", Integer, nullable=False)
@@ -40,5 +44,5 @@ class Post(Base):
     )
     tags: Mapped[list[Tag]] = relationship(
         secondary=post_tags,
-        back_populates="posts",
+        back_populates="posts"
     )

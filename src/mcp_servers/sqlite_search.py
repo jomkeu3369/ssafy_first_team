@@ -7,7 +7,7 @@ from sqlalchemy import text
 from src.core.database import engine
 
 
-SEARCHABLE_TABLES: dict[str, dict[str, list[str]]] = {"Board": {"id": ["boardId"], "title": ["name"], "content": ["description"], "address": [], "image_url": ["image"], "region": [], "category": ["category"]}, "post": {"id": ["postId"], "title": ["title"], "content": ["content"], "address": [], "image_url": [], "region": [], "category": []}}
+SEARCHABLE_TABLES: dict[str, dict[str, list[str]]] = {"Board": {"id": ["boardId"], "title": ["name"], "content": ["description"], "address": [], "image_url": ["image"], "region": [], "category": ["category"]}, "post": {"id": ["postId"], "title": ["title", "titleKr", "titleEn"], "content": ["content", "contentKr", "contentEn"], "address": [], "image_url": [], "region": [], "category": []}}
 CONTENT_TYPE_ALIASES = {"board": "Board", "boards": "Board", "regional_contents": "Board", "post": "post", "posts": "post"}
 
 
@@ -41,7 +41,7 @@ async def search_sqlite_database(keyword: str, content_type: str | None = None, 
             columns = {row[1] for row in pragma}
             aliases = SEARCHABLE_TABLES[table]
             selected = {key: _first_existing(candidates, columns) for key, candidates in aliases.items()}
-            search_columns = [column for key in ("title", "content", "address") if (column := selected[key])]
+            search_columns = list(dict.fromkeys(column for key in ("title", "content", "address") for column in aliases[key] if column in columns))
             if not search_columns:
                 continue
 

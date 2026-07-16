@@ -71,9 +71,9 @@ async def load_search_documents(target_engine: AsyncEngine = engine) -> tuple[li
                 documents.append(_document("\n".join(fields), "Board", row["boardId"], row["name"], row["address"], row["image"], row["category"]))
         if "post" in tables:
             tags_expression = '(SELECT GROUP_CONCAT(t.name, ", ") FROM "Post_Tags" pt JOIN "Tag" t ON t."tagId" = pt."tagId" WHERE pt."postId" = p."postId")' if {"Post_Tags", "Tag"} <= tables else "NULL"
-            post_rows = await connection.execute(text(f'SELECT p."postId", p.title, p.content, b.name AS board_name, b.category, {tags_expression} AS tags FROM post p JOIN "Board" b ON b."boardId" = p."boardId" ORDER BY p."postId"'))
+            post_rows = await connection.execute(text(f'SELECT p."postId", p.title, p."titleKr", p."titleEn", p.content, p."contentKr", p."contentEn", b.name AS board_name, b.category, {tags_expression} AS tags FROM post p JOIN "Board" b ON b."boardId" = p."boardId" ORDER BY p."postId"'))
             for row in post_rows.mappings():
-                fields = [f"게시글 제목: {row['title']}", f"게시판: {row['board_name']}", f"카테고리: {row['category']}", f"본문: {row['content']}"]
+                fields = [f"게시글 원문 제목: {row['title']}", f"한국어 제목: {row['titleKr'] or row['title']}", f"영어 제목: {row['titleEn'] or row['title']}", f"게시판: {row['board_name']}", f"카테고리: {row['category']}", f"게시글 원문: {row['content']}", f"한국어 본문: {row['contentKr'] or row['content']}", f"영어 본문: {row['contentEn'] or row['content']}"]
                 if row["tags"]:
                     fields.append(f"태그: {row['tags']}")
                 documents.append(_document("\n".join(fields), "post", row["postId"], row["title"], None, None, row["category"]))

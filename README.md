@@ -116,6 +116,30 @@ uv run python scripts/build_faiss_index.py
 
 도구가 실제로 반환한 로컬 레코드와 웹 URL만 `references`에 포함합니다.
 
+## 게시글 자동 번역
+
+게시글 생성과 수정 API는 `OPENAI_API_KEY`와 `OPENAI_MODEL`로 GPT 구조화 번역을 실행합니다. 한글 원문은 영어로, 영어 원문은 한글로 번역하며 기존 `title`, `content`에는 입력 원문을 유지합니다. 모든 게시글 GET 응답은 다음 필드를 함께 제공합니다.
+
+```json
+{
+  "title": "해운대 야경",
+  "titleKr": "해운대 야경",
+  "titleEn": "Haeundae Night View",
+  "content": "달맞이길 전망대 후기",
+  "contentKr": "달맞이길 전망대 후기",
+  "contentEn": "A review of the Dalmaji-gil observatory"
+}
+```
+
+번역 설정이 없으면 생성·수정은 `503`, GPT 호출이나 구조화 결과가 실패하면 `502`를 반환하며 게시글은 저장하지 않습니다. 기존 게시글의 번역 컬럼이 비어 있으면 GET 응답은 원문을 양쪽 언어 필드에 폴백합니다. SQLite는 서버 시작 시 컬럼을 자동 추가하며, 수동 마이그레이션 환경에서는 다음 컬럼이 필요합니다.
+
+```sql
+ALTER TABLE post ADD COLUMN "titleKr" VARCHAR(500) NULL;
+ALTER TABLE post ADD COLUMN "titleEn" VARCHAR(500) NULL;
+ALTER TABLE post ADD COLUMN "contentKr" TEXT NULL;
+ALTER TABLE post ADD COLUMN "contentEn" TEXT NULL;
+```
+
 ## 부산 JSON 데이터 업로드
 
 Render 환경 변수에 충분히 긴 임의 문자열을 등록합니다.

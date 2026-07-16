@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.post import crud
 from src.api.post.rate_limit import VerifyRateLimiter
 from src.api.post.schema import ErrorResponse, PasswordRequest, PasswordVerifyResponse, PostPageResponse, PostResponse, PostSort, PostWrite
+from src.api.post.translation import PostTranslator, TranslationFailedError, TranslationUnavailableError, get_post_translator
 from src.api.realtime.manager import manager as realtime_manager
 from src.core.database import get_db_session
 
@@ -42,10 +43,10 @@ async def get_post(post_id: Annotated[int, Path(ge=0)], client_id: Annotated[UUI
         return _error(status.HTTP_404_NOT_FOUND, "게시글을 찾을 수 없습니다.")
 
 
-@router.post("/boards/{board_id}/posts", response_model=PostResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED, responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}})
-async def create_post(board_id: Annotated[int, Path(ge=0)], payload: PostWrite, client_id: Annotated[UUID, Header(alias="X-Client-Id")], db: Annotated[AsyncSession, Depends(get_db_session)]) -> PostResponse | JSONResponse:
+@router.post("/boards/{board_id}/posts", response_model=PostResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED, responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 502: {"model": ErrorResponse}, 503: {"model": ErrorResponse}})
+async def create_post(board_id: Annotated[int, Path(ge=0)], payload: PostWrite, client_id: Annotated[UUID, Header(alias="X-Client-Id")], db: Annotated[AsyncSession, Depends(get_db_session)], translator: Annotated[PostTranslator, Depends(get_post_translator)]) -> PostResponse | JSONResponse:
     try:
-        created = await crud.create_post(db, board_id, payload, str(client_id))
+        created = await crud.create_post(db, board_id, payload, str(client_id), translator)
         created_at = created.created_at.isoformat() if created.created_at is not None else None
         await realtime_manager.broadcast_post_created(created.post_id, created.board_id, created.title, created_at)
         return created
@@ -57,12 +58,16 @@ async def create_post(board_id: Annotated[int, Path(ge=0)], payload: PostWrite, 
         return _error(status.HTTP_400_BAD_REQUEST, "이미 사용 중인 미디어입니다.")
     except IntegrityError:
         return _error(status.HTTP_400_BAD_REQUEST, "게시글을 생성하지 못했습니다.")
+    except TranslationUnavailableError:
+        return _error(status.HTTP_503_SERVICE_UNAVAILABLE, "게시글 번역 기능이 설정되지 않았습니다.")
+    except TranslationFailedError:
+        return _error(status.HTTP_502_BAD_GATEWAY, "게시글을 번역하지 못했습니다.")
 
 
-@router.put("/posts/{post_id}", response_model=PostResponse, response_model_by_alias=True, responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 404: {"model": ErrorResponse}})
-async def update_post(post_id: Annotated[int, Path(ge=0)], payload: PostWrite, db: Annotated[AsyncSession, Depends(get_db_session)]) -> PostResponse | JSONResponse:
+@router.put("/posts/{post_id}", response_model=PostResponse, response_model_by_alias=True, responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 502: {"model": ErrorResponse}, 503: {"model": ErrorResponse}})
+async def update_post(post_id: Annotated[int, Path(ge=0)], payload: PostWrite, db: Annotated[AsyncSession, Depends(get_db_session)], translator: Annotated[PostTranslator, Depends(get_post_translator)]) -> PostResponse | JSONResponse:
     try:
-        return await crud.update_post(db, post_id, payload)
+        return await crud.update_post(db, post_id, payload, translator)
     except crud.PostNotFoundError:
         return _error(status.HTTP_404_NOT_FOUND, "게시글을 찾을 수 없습니다.")
     except crud.PasswordMismatchError:
@@ -73,6 +78,10 @@ async def update_post(post_id: Annotated[int, Path(ge=0)], payload: PostWrite, d
         return _error(status.HTTP_400_BAD_REQUEST, "이미 사용 중인 미디어입니다.")
     except IntegrityError:
         return _error(status.HTTP_400_BAD_REQUEST, "게시글을 수정하지 못했습니다.")
+    except TranslationUnavailableError:
+        return _error(status.HTTP_503_SERVICE_UNAVAILABLE, "게시글 번역 기능이 설정되지 않았습니다.")
+    except TranslationFailedError:
+        return _error(status.HTTP_502_BAD_GATEWAY, "게시글을 번역하지 못했습니다.")
 
 
 @router.delete("/posts/{post_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT, responses={401: {"model": ErrorResponse}, 404: {"model": ErrorResponse}})

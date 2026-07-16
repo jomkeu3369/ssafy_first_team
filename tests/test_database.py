@@ -6,8 +6,8 @@ from src.core.database import engine, ensure_database_compatibility
 from src.models import Base
 
 
-def _column_names(sync_connection) -> set[str]:
-    return {column["name"] for column in inspect(sync_connection).get_columns("Board")}
+def _column_names(sync_connection, table: str = "Board") -> set[str]:
+    return {column["name"] for column in inspect(sync_connection).get_columns(table)}
 
 
 @pytest.mark.asyncio
@@ -37,6 +37,20 @@ async def test_database_compatibility_adds_board_tourism_columns_once() -> None:
 async def test_database_compatibility_skips_missing_board_table() -> None:
     target_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     assert await ensure_database_compatibility(target_engine) is False
+    await target_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_database_compatibility_adds_post_translation_columns_once() -> None:
+    target_engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with target_engine.begin() as connection:
+        await connection.execute(text('CREATE TABLE post ("postId" BIGINT PRIMARY KEY, "boardId" BIGINT NOT NULL, title VARCHAR NOT NULL, author VARCHAR NOT NULL, content TEXT NOT NULL, password VARCHAR NOT NULL, "viewCount" INTEGER NOT NULL, "likeCount" INTEGER NOT NULL)'))
+
+    assert await ensure_database_compatibility(target_engine) is True
+    assert await ensure_database_compatibility(target_engine) is False
+    async with target_engine.connect() as connection:
+        columns = await connection.run_sync(_column_names, "post")
+    assert {"titleKr", "titleEn", "contentKr", "contentEn"} <= columns
     await target_engine.dispose()
 
 

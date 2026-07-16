@@ -79,8 +79,12 @@ class PostResponse(BaseModel):
     post_id: int = Field(serialization_alias="postId")
     board_id: int = Field(serialization_alias="boardId")
     title: str
+    title_kr: str = Field(serialization_alias="titleKr")
+    title_en: str = Field(serialization_alias="titleEn")
     author: str
     content: str
+    content_kr: str = Field(serialization_alias="contentKr")
+    content_en: str = Field(serialization_alias="contentEn")
     view_count: int = Field(serialization_alias="viewCount")
     like_count: int = Field(serialization_alias="likeCount")
     comment_count: int = Field(serialization_alias="commentCount")

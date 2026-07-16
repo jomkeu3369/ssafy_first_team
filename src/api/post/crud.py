@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from src.api.post.passwords import hash_password, verify_password
 from src.api.post.schema import MediaResponse, PostPageResponse, PostResponse, PostSort, PostWrite, TagResponse, tag_category
+from src.api.post.translation import PostTranslator
 from src.api.localization import tag_name_en
 from src.api.tag.crud import DEFAULT_TAGS
 from src.core.ids import MAX_PUBLIC_ID
@@ -60,7 +61,7 @@ def _to_response(row) -> PostResponse:
     post = row[0]
     tags = [TagResponse(tag_id=tag.tag_id, name=tag.name, name_en=tag_name_en(tag.tag_id, tag.name), category=tag_category(tag.tag_id)) for tag in sorted(post.tags, key=lambda item: item.tag_id)]
     media = [MediaResponse(media_id=item.media_id, image_url=item.image_url) for item in post.media]
-    return PostResponse(post_id=post.post_id, board_id=post.board_id, title=post.title, author=post.author, content=post.content, view_count=post.view_count, like_count=post.like_count, comment_count=row.comment_count or 0, created_at=None, updated_at=None, tags=tags, media=media)
+    return PostResponse(post_id=post.post_id, board_id=post.board_id, title=post.title, title_kr=post.title_kr or post.title, title_en=post.title_en or post.title, author=post.author, content=post.content, content_kr=post.content_kr or post.content, content_en=post.content_en or post.content, view_count=post.view_count, like_count=post.like_count, comment_count=row.comment_count or 0, created_at=None, updated_at=None, tags=tags, media=media)
 
 
 async def _resolve_tags(db: AsyncSession, payload: PostWrite) -> list[Tag]:
@@ -103,7 +104,7 @@ async def get_posts(db: AsyncSession, board_id: int, keyword: str | None, sort: 
     filters = [Post.board_id == board_id]
     if keyword:
         pattern = f"%{keyword.strip()}%"
-        filters.append(or_(Post.title.ilike(pattern), Post.content.ilike(pattern), Post.tags.any(Tag.name.ilike(pattern))))
+        filters.append(or_(Post.title.ilike(pattern), Post.title_kr.ilike(pattern), Post.title_en.ilike(pattern), Post.content.ilike(pattern), Post.content_kr.ilike(pattern), Post.content_en.ilike(pattern), Post.tags.any(Tag.name.ilike(pattern))))
 
     total = await db.scalar(select(func.count(Post.post_id)).where(*filters)) or 0
     comment_count = _comment_count()
@@ -121,13 +122,14 @@ async def get_popular_posts(db: AsyncSession, page: int, size: int) -> PostPageR
     return PostPageResponse(items=[_to_response(row) for row in rows], total=total, page=page, size=size)
 
 
-async def create_post(db: AsyncSession, board_id: int, payload: PostWrite, author: str) -> PostResponse:
+async def create_post(db: AsyncSession, board_id: int, payload: PostWrite, author: str, translator: PostTranslator) -> PostResponse:
     if await db.get(Board, board_id) is None:
         raise BoardNotFoundError
+    translated = await translator.translate(payload.title, payload.content)
 
     async with _post_write_lock:
         tags = await _resolve_tags(db, payload)
-        post = Post(post_id=await _next_post_id(db), board_id=board_id, title=payload.title, author=author, content=payload.content, password=hash_password(payload.password), view_count=0, like_count=0)
+        post = Post(post_id=await _next_post_id(db), board_id=board_id, title=payload.title, title_kr=translated.title_kr, title_en=translated.title_en, author=author, content=payload.content, content_kr=translated.content_kr, content_en=translated.content_en, password=hash_password(payload.password), view_count=0, like_count=0)
         post.tags = tags
         db.add(post)
 
@@ -145,7 +147,7 @@ async def create_post(db: AsyncSession, board_id: int, payload: PostWrite, autho
     return result
 
 
-async def update_post(db: AsyncSession, post_id: int, payload: PostWrite) -> PostResponse:
+async def update_post(db: AsyncSession, post_id: int, payload: PostWrite, translator: PostTranslator) -> PostResponse:
     statement = select(Post).options(selectinload(Post.tags), selectinload(Post.media)).where(Post.post_id == post_id)
     post = (await db.scalars(statement)).one_or_none()
     if post is None:
@@ -153,8 +155,13 @@ async def update_post(db: AsyncSession, post_id: int, payload: PostWrite) -> Pos
     if not verify_password(payload.password, post.password):
         raise PasswordMismatchError
 
+    translated = await translator.translate(payload.title, payload.content)
     post.title = payload.title
+    post.title_kr = translated.title_kr
+    post.title_en = translated.title_en
     post.content = payload.content
+    post.content_kr = translated.content_kr
+    post.content_en = translated.content_en
     post.tags = await _resolve_tags(db, payload)
     try:
         await _replace_media(db, post_id, payload)

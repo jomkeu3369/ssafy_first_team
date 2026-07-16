@@ -41,11 +41,11 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
-def _board_columns(sync_connection) -> set[str] | None:
+def _columns(sync_connection, table: str) -> set[str] | None:
     inspector = inspect(sync_connection)
-    if "Board" not in inspector.get_table_names():
+    if table not in inspector.get_table_names():
         return None
-    return {column["name"] for column in inspector.get_columns("Board")}
+    return {column["name"] for column in inspector.get_columns(table)}
 
 
 def _table_names(sync_connection) -> set[str]:
@@ -93,11 +93,13 @@ async def _normalize_sqlite_ids(connection) -> bool:
 
 async def _apply_compatibility_updates(connection, normalize_ids: bool) -> bool:
     changed = False
-    columns = await connection.run_sync(_board_columns)
-    missing_columns = {"image": "VARCHAR(2000) NULL", "contentId": "VARCHAR(100) NULL", "address": "VARCHAR(500) NULL", "eventStartDate": "VARCHAR(8) NULL", "eventEndDate": "VARCHAR(8) NULL", "eventPlace": "VARCHAR(500) NULL"}
-    if columns is not None:
+    compatibility_columns = {"Board": {"image": "VARCHAR(2000) NULL", "contentId": "VARCHAR(100) NULL", "address": "VARCHAR(500) NULL", "eventStartDate": "VARCHAR(8) NULL", "eventEndDate": "VARCHAR(8) NULL", "eventPlace": "VARCHAR(500) NULL"}, "post": {"titleKr": "VARCHAR(500) NULL", "titleEn": "VARCHAR(500) NULL", "contentKr": "TEXT NULL", "contentEn": "TEXT NULL"}}
+    for table, missing_columns in compatibility_columns.items():
+        columns = await connection.run_sync(_columns, table)
+        if columns is None:
+            continue
         preparer = connection.dialect.identifier_preparer
-        table_name = preparer.quote("Board")
+        table_name = preparer.quote(table)
         for column, definition in missing_columns.items():
             if column in columns:
                 continue
