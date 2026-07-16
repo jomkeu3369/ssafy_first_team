@@ -189,6 +189,12 @@ curl.exe -X POST "https://YOUR-SERVICE.onrender.com/api/v1/admin/data-import/boa
 curl.exe -X POST "https://YOUR-SERVICE.onrender.com/api/v1/admin/data-import/board-translations?limit=100" -H "X-Import-Key: YOUR_SECRET"
 ```
 
+Render에 저장된 Board의 누락된 영어 필드를 모두 GPT로 번역하려면 다음 Python 스크립트를 실행합니다.
+
+```powershell
+uv run python scripts/translate_boards.py --import-key "YOUR_DATA_IMPORT_API_KEY"
+```
+
 ## 태그와 통합 검색
 
 `POST /api/v1/tags`에 `{"name":"야경"}`을 전달하면 `tagId` 10 이상의 `CUSTOM` 태그를 생성합니다. 게시글에는 `GET /api/v1/tags` 또는 태그 생성 응답으로 받은 정확한 `tagId`, `name`, `category`를 전달해야 합니다.
