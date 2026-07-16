@@ -10,10 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.data_import.schema import BoardTranslationResponse, FaissIndexResponse, FaissIndexStatusResponse, ImportResponse
 from src.api.data_import.translation import BoardTranslator
+from src.api.comment.translation import CommentTranslator
+from src.api.data_import.schema import CommentTranslationResponse
 from src.api.localization import BOARD_CATEGORY_EN
 from src.core.config import get_settings
 from src.mcp_servers.faiss_store import ensure_vector_store, vector_store_status
 from src.models.board import Board
+from src.models.comment import Comment
 
 
 MAX_FILE_COUNT = 10
@@ -200,6 +203,24 @@ async def translate_missing_boards(db: AsyncSession, translator: BoardTranslator
             raise
         remaining = await db.scalar(select(func.count(Board.board_id)).where(_needs_translation())) or 0
     return BoardTranslationResponse(requested_count=limit, translated_count=len(boards), remaining_count=remaining)
+
+
+async def translate_missing_comments(db: AsyncSession, translator: CommentTranslator, limit: int) -> CommentTranslationResponse:
+    missing_filter = and_(Comment.content_kr.is_not(None), or_(Comment.content_en.is_(None), Comment.content_en == ""))
+    comments = list((await db.scalars(select(Comment).where(missing_filter).order_by(Comment.comment_id).limit(limit))).all())
+    try:
+        for start in range(0, len(comments), 5):
+            batch = comments[start:start + 5]
+            translations = await asyncio.gather(*(translator.translate(comment.content_kr or comment.content) for comment in batch))
+            for comment, translated in zip(batch, translations, strict=True):
+                comment.content_kr = translated.content_kr
+                comment.content_en = translated.content_en
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+    remaining = await db.scalar(select(func.count(Comment.comment_id)).where(missing_filter)) or 0
+    return CommentTranslationResponse(requested_count=limit, translated_count=len(comments), remaining_count=remaining)
 
 
 async def rebuild_faiss_index() -> FaissIndexResponse:

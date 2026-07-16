@@ -29,6 +29,8 @@ class Comment(Base):
     )
     author: Mapped[str] = mapped_column(String, nullable=False, comment="UUID")
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_kr: Mapped[str | None] = mapped_column("contentKr", Text, nullable=True)
+    content_en: Mapped[str | None] = mapped_column("contentEn", Text, nullable=True)
     password: Mapped[str] = mapped_column(String, nullable=False)
 
     post: Mapped["Post"] = relationship(back_populates="comments")

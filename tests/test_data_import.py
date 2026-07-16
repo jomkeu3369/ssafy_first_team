@@ -11,10 +11,13 @@ from src.api.data_import import router as router_module
 from src.api.data_import import service as import_service
 from src.api.data_import.router import router
 from src.api.data_import.translation import TranslatedBoard, get_board_translator
+from src.api.comment.translation import TranslatedComment, get_comment_translator
 from src.api.tourism.router import router as tourism_router
 from src.core.database import get_db_session
 from src.models import Base
 from src.models.board import Board
+from src.models.comment import Comment
+from src.models.post import Post
 
 
 async def _app_with_database():
@@ -156,6 +159,36 @@ async def test_board_translation_backfill_persists_real_english_fields(monkeypat
         board = (await session.scalars(select(Board).where(Board.name == "부산 불꽃축제"))).one()
         assert board.name_en == "Busan Fireworks Festival"
         assert board.event_place_en == "Gwangalli Beach"
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_comment_translation_backfill_persists_both_languages(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, engine, session_factory = await _app_with_database()
+
+    class FakeTranslator:
+        async def translate(self, content: str) -> TranslatedComment:
+            return TranslatedComment(content_kr=content, content_en="A great place!")
+
+    app.dependency_overrides[get_comment_translator] = FakeTranslator
+    monkeypatch.setattr(router_module.settings, "data_import_api_key", "test-import-secret")
+    monkeypatch.setattr(router_module.settings, "openai_api_key", "openai-test")
+    async with session_factory() as session:
+        session.add(Board(board_id=1, name="게시판", category="FREE"))
+        session.add(Post(post_id=1, board_id=1, title="글", author="client", content="본문", password="hash", view_count=0, like_count=0))
+        session.add(Comment(comment_id=1, post_id=1, parent_id=None, author="client", content="좋은 곳이에요!", content_kr="좋은 곳이에요!", password="hash"))
+        await session.commit()
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        translated = await client.post("/api/v1/admin/data-import/comment-translations", headers={"X-Import-Key": "test-import-secret"}, params={"limit": 20})
+
+    assert translated.status_code == 200
+    assert translated.json() == {"requestedCount": 20, "translatedCount": 1, "remainingCount": 0}
+    async with session_factory() as session:
+        comment = await session.get(Comment, 1)
+        assert comment.content_kr == "좋은 곳이에요!"
+        assert comment.content_en == "A great place!"
     await engine.dispose()
 
 

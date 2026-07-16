@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.api.comment.crud import DELETED_COMMENT_CONTENT
 from src.api.comment.router import router
+from src.api.comment.translation import TranslatedComment, get_comment_translator
 from src.core.database import get_db_session
 from src.models import Base
 from src.models.board import Board
@@ -31,7 +32,14 @@ async def _app_with_database():
         async with session_factory() as session:
             yield session
 
+    class FakeTranslator:
+        async def translate(self, content: str) -> TranslatedComment:
+            if any("가" <= character <= "힣" for character in content):
+                return TranslatedComment(content_kr=content, content_en=f"EN: {content}")
+            return TranslatedComment(content_kr=f"KR: {content}", content_en=content)
+
     app.dependency_overrides[get_db_session] = override_session
+    app.dependency_overrides[get_comment_translator] = FakeTranslator
     return app, engine, session_factory
 
 
@@ -53,6 +61,8 @@ async def test_comment_api_builds_two_level_tree_and_uses_header_author() -> Non
     assert parent.status_code == 201
     assert parent_id == 1
     assert parent.json()["author"] == client_id
+    assert parent.json()["contentKr"] == "부모 댓글"
+    assert parent.json()["contentEn"] == "EN: 부모 댓글"
     assert "password" not in parent.json()
     assert child.status_code == 201
     assert child_id == 2
@@ -88,8 +98,12 @@ async def test_comment_update_password_and_soft_delete_parent() -> None:
 
     assert denied.status_code == 401
     assert updated.status_code == 200 and updated.json()["content"] == "수정"
+    assert updated.json()["contentKr"] == "수정"
+    assert updated.json()["contentEn"] == "EN: 수정"
     assert soft_deleted.status_code == 204
     assert after_soft_delete.json()["items"][0]["content"] == DELETED_COMMENT_CONTENT
+    assert after_soft_delete.json()["items"][0]["contentKr"] == DELETED_COMMENT_CONTENT
+    assert after_soft_delete.json()["items"][0]["contentEn"] == "This comment has been deleted."
     assert after_soft_delete.json()["items"][0]["children"][0]["commentId"] == child_id
     assert hard_deleted.status_code == 204
     assert after_hard_delete.json()["items"][0]["children"] == []

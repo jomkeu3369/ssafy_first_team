@@ -5,6 +5,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.comment.schema import CommentCreate, CommentPageResponse, CommentResponse
+from src.api.comment.translation import CommentTranslator
 from src.api.post.passwords import hash_password, verify_password
 from src.core.ids import MAX_PUBLIC_ID
 from src.models.comment import Comment
@@ -12,6 +13,7 @@ from src.models.post import Post
 
 
 DELETED_COMMENT_CONTENT = "삭제된 댓글입니다"
+DELETED_COMMENT_CONTENT_EN = "This comment has been deleted."
 
 
 class PostNotFoundError(Exception):
@@ -42,7 +44,7 @@ async def _next_comment_id(db: AsyncSession) -> int:
 
 
 def _to_response(comment: Comment) -> CommentResponse:
-    return CommentResponse(comment_id=comment.comment_id, post_id=comment.post_id, parent_id=comment.parent_id, author=comment.author, content=comment.content, created_at=None, updated_at=None, children=[])
+    return CommentResponse(comment_id=comment.comment_id, post_id=comment.post_id, parent_id=comment.parent_id, author=comment.author, content=comment.content_kr or comment.content, content_kr=comment.content_kr or comment.content, content_en=comment.content_en or "", created_at=None, updated_at=None, children=[])
 
 
 async def get_comments(db: AsyncSession, post_id: int, page: int, size: int) -> CommentPageResponse:
@@ -63,7 +65,7 @@ async def get_comments(db: AsyncSession, post_id: int, page: int, size: int) -> 
     return CommentPageResponse(items=[nodes[comment.comment_id] for comment in roots], total=total, page=page, size=size)
 
 
-async def create_comment(db: AsyncSession, post_id: int, payload: CommentCreate, author: str) -> CommentResponse:
+async def create_comment(db: AsyncSession, post_id: int, payload: CommentCreate, author: str, translator: CommentTranslator) -> CommentResponse:
     if await db.get(Post, post_id) is None:
         raise PostNotFoundError
 
@@ -75,21 +77,25 @@ async def create_comment(db: AsyncSession, post_id: int, payload: CommentCreate,
             raise CommentDepthError
 
     async with _comment_write_lock:
-        comment = Comment(comment_id=await _next_comment_id(db), post_id=post_id, parent_id=payload.parent_id, author=author, content=payload.content, password=hash_password(payload.password))
+        translated = await translator.translate(payload.content)
+        comment = Comment(comment_id=await _next_comment_id(db), post_id=post_id, parent_id=payload.parent_id, author=author, content=payload.content, content_kr=translated.content_kr, content_en=translated.content_en, password=hash_password(payload.password))
         db.add(comment)
         await db.commit()
         await db.refresh(comment)
     return _to_response(comment)
 
 
-async def update_comment(db: AsyncSession, comment_id: int, content: str, password: str) -> CommentResponse:
+async def update_comment(db: AsyncSession, comment_id: int, content: str, password: str, translator: CommentTranslator) -> CommentResponse:
     comment = await db.get(Comment, comment_id)
     if comment is None:
         raise CommentNotFoundError
     if not verify_password(password, comment.password):
         raise PasswordMismatchError
 
+    translated = await translator.translate(content)
     comment.content = content
+    comment.content_kr = translated.content_kr
+    comment.content_en = translated.content_en
     await db.commit()
     await db.refresh(comment)
     return _to_response(comment)
@@ -105,6 +111,8 @@ async def delete_comment(db: AsyncSession, comment_id: int, password: str) -> No
     child_exists = await db.scalar(select(Comment.comment_id).where(Comment.parent_id == comment_id).limit(1))
     if child_exists is not None:
         comment.content = DELETED_COMMENT_CONTENT
+        comment.content_kr = DELETED_COMMENT_CONTENT
+        comment.content_en = DELETED_COMMENT_CONTENT_EN
         comment.password = hash_password(secrets.token_urlsafe(32))
     else:
         await db.execute(delete(Comment).where(Comment.comment_id == comment_id))

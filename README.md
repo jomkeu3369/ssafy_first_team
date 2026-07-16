@@ -201,6 +201,8 @@ curl.exe -X POST "https://YOUR-SERVICE.onrender.com/api/v1/admin/data-import/boa
 
 Board는 DB와 API 응답에서 `nameKr/nameEn`, `categoryKr/categoryEn`, `descriptionKr/descriptionEn`을 명시적으로 분리합니다. 기존 `name/category/description`은 이전 프론트와의 호환을 위해 기존 값을 유지합니다. 새 게시판 생성은 GPT 번역을 완료한 뒤 두 언어를 같은 트랜잭션에 저장합니다. 대량 관광 데이터는 관리자 번역 API로 영문 값을 채우며, 영문 필드에 한글이 포함된 기존 값은 마이그레이션에서 제거되어 다시 번역 대상이 됩니다. 관광지와 축제 응답의 `boardId`는 가져오기 API가 생성하거나 갱신한 같은 Board 행을 가리킵니다.
 
+댓글과 대댓글도 `contentKr/contentEn`을 함께 저장하고 응답합니다. 한국어 또는 영어 댓글의 생성·수정은 GPT 번역이 성공한 경우에만 커밋됩니다. 기존 댓글은 `POST /api/v1/admin/data-import/comment-translations?limit=20`을 `remainingCount`가 0이 될 때까지 호출해 번역할 수 있습니다.
+
 `GET /api/v1/posts/popular?page=1&size=10`은 모든 게시판의 게시글을 좋아요·댓글·조회 수 순으로 통합 조회합니다.
 
 ## Render DB 영속 배포

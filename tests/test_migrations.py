@@ -28,9 +28,11 @@ async def test_migrations_create_new_database_to_head(tmp_path: Path) -> None:
         version = await connection.scalar(text("SELECT version_num FROM alembic_version"))
         board_columns = await connection.run_sync(_columns, "Board")
         post_columns = await connection.run_sync(_columns, "post")
-    assert version == "7c1b0a4d9e21"
+        comment_columns = await connection.run_sync(_columns, "comment")
+    assert version == "a42d91e7c305"
     assert {"nameKr", "nameEn", "categoryKr", "categoryEn", "descriptionKr", "descriptionEn", "addressEn", "eventPlaceEn"} <= board_columns
     assert {"titleKr", "titleEn", "contentKr", "contentEn", "createdAt", "updatedAt"} <= post_columns
+    assert {"contentKr", "contentEn"} <= comment_columns
     await target_engine.dispose()
 
 
@@ -49,7 +51,7 @@ async def test_migrations_stamp_legacy_database_without_deleting_rows(tmp_path: 
     async with target_engine.connect() as connection:
         version = await connection.scalar(text("SELECT version_num FROM alembic_version"))
         row = (await connection.execute(text('SELECT "boardId", name, "nameKr", "nameEn", "categoryKr", "categoryEn", "descriptionKr", "descriptionEn" FROM "Board"'))).one()
-    assert version == "7c1b0a4d9e21"
+    assert version == "a42d91e7c305"
     assert tuple(row) == (7, "보존할 데이터", "보존할 데이터", None, "관광지", "Attractions", "주소: 부산", None)
     await target_engine.dispose()
 

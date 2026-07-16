@@ -30,6 +30,8 @@ class CommentResponse(BaseModel):
     parent_id: int | None = Field(serialization_alias="parentId")
     author: str
     content: str
+    content_kr: str = Field(serialization_alias="contentKr")
+    content_en: str = Field(serialization_alias="contentEn")
     created_at: datetime | None = Field(default=None, serialization_alias="createdAt")
     updated_at: datetime | None = Field(default=None, serialization_alias="updatedAt")
     children: list["CommentResponse"] = Field(default_factory=list)

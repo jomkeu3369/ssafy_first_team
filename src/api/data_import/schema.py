@@ -16,6 +16,12 @@ class BoardTranslationResponse(BaseModel):
     remaining_count: int = Field(serialization_alias="remainingCount")
 
 
+class CommentTranslationResponse(BaseModel):
+    requested_count: int = Field(serialization_alias="requestedCount")
+    translated_count: int = Field(serialization_alias="translatedCount")
+    remaining_count: int = Field(serialization_alias="remainingCount")
+
+
 class FaissIndexResponse(BaseModel):
     indexed_count: int = Field(serialization_alias="indexedCount")
     fingerprint: str
