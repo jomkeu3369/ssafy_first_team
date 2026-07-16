@@ -1,3 +1,4 @@
+import asyncio
 import json
 from types import SimpleNamespace
 
@@ -159,6 +160,37 @@ async def test_board_translation_backfill_persists_real_english_fields(monkeypat
         board = (await session.scalars(select(Board).where(Board.name == "부산 불꽃축제"))).one()
         assert board.name_en == "Busan Fireworks Festival"
         assert board.event_place_en == "Gwangalli Beach"
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_board_translation_runs_batches_in_parallel() -> None:
+    _app, engine, session_factory = await _app_with_database()
+
+    class ParallelTranslator:
+        def __init__(self) -> None:
+            self.active_count = 0
+            self.max_active_count = 0
+            self.batch_sizes: list[int] = []
+
+        async def translate(self, boards: list[Board]) -> list[TranslatedBoard]:
+            self.active_count += 1
+            self.max_active_count = max(self.max_active_count, self.active_count)
+            self.batch_sizes.append(len(boards))
+            await asyncio.sleep(0.01)
+            self.active_count -= 1
+            return [TranslatedBoard(board_id=board.board_id, name_en=f"Board {board.board_id}", description_en=None, address_en=None, event_place_en=None) for board in boards]
+
+    translator = ParallelTranslator()
+    async with session_factory() as session:
+        session.add_all([Board(board_id=board_id, name=f"게시판 {board_id}", name_kr=f"게시판 {board_id}", category="관광지", category_kr="관광지", category_en="Attractions") for board_id in range(1, 42)])
+        await session.commit()
+        result = await import_service.translate_missing_boards(session, translator, 100)
+
+    assert result.translated_count == 41
+    assert result.remaining_count == 0
+    assert sorted(translator.batch_sizes) == [1, 20, 20]
+    assert translator.max_active_count == 3
     await engine.dispose()
 
 

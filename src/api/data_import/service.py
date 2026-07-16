@@ -189,9 +189,9 @@ async def translate_missing_boards(db: AsyncSession, translator: BoardTranslator
     async with _translation_lock:
         boards = list((await db.scalars(select(Board).where(_needs_translation()).order_by(Board.board_id).limit(limit))).all())
         try:
-            for start in range(0, len(boards), 20):
-                batch = boards[start:start + 20]
-                translations = await translator.translate(batch)
+            batches = [boards[start:start + 20] for start in range(0, len(boards), 20)]
+            translated_batches = await asyncio.gather(*(translator.translate(batch) for batch in batches))
+            for batch, translations in zip(batches, translated_batches, strict=True):
                 for board, translated in zip(batch, translations, strict=True):
                     board.name_en = translated.name_en
                     board.description_en = translated.description_en
