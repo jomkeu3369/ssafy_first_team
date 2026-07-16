@@ -96,9 +96,10 @@ class AgentService:
         thread_id = self.conversation_thread_id(client_id, session_id)
         config = {"recursion_limit": self.settings.agent_recursion_limit, "configurable": {"thread_id": thread_id}}
         state = await self._agent.aget_state(config)
+        previous_messages = state.values.get("messages", [])
         messages: list[HumanMessage | AIMessage] = []
         
-        if not state.values.get("messages"):
+        if not previous_messages:
             for item in request.history:
                 message_class = HumanMessage if item.role == "user" else AIMessage
                 messages.append(message_class(content=item.content))
@@ -116,15 +117,16 @@ class AgentService:
                 config=config
             )
         result_messages = result.get("messages", [])
+        current_turn_messages = self._current_turn_messages(result_messages, len(previous_messages))
         answer = next(
             (
                 self._message_text(message)
-                for message in reversed(result_messages)
+                for message in reversed(current_turn_messages or result_messages)
                 if isinstance(message, AIMessage)
             ),
             "",
         )
-        references = self._extract_references(result_messages)
+        references = self._extract_references(current_turn_messages)
         return ChatResponse(
             answer=answer,
             language=request.language,
@@ -138,6 +140,12 @@ class AgentService:
     @staticmethod
     def localized_user_message(request: ChatRequest) -> HumanMessage:
         return HumanMessage(content=f"[LOCALHUB_RESPONSE_LANGUAGE={request.language}]\n{request.message}")
+
+    @staticmethod
+    def _current_turn_messages(result_messages: list[Any], previous_message_count: int) -> list[Any]:
+        if previous_message_count <= len(result_messages):
+            return result_messages[previous_message_count:]
+        return result_messages
 
     def _mcp_connections(self) -> dict[str, dict[str, Any]]:
         database_environment = {"DATABASE_URL": self.settings.database_url}

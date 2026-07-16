@@ -158,7 +158,7 @@ async def load_remote_search_documents() -> tuple[list[dict[str, Any]], str]:
 
 
 async def load_search_documents(target_engine: AsyncEngine = engine) -> tuple[list[dict[str, Any]], str]:
-    if settings.vector_source_url:
+    if settings.vector_source_url and target_engine is engine:
         return await load_remote_search_documents()
     return await load_database_search_documents(target_engine)
 

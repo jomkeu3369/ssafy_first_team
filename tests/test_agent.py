@@ -1,8 +1,9 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from src.agent import service as service_module
 from src.agent.prompts import SYSTEM_PROMPT
@@ -115,3 +116,23 @@ def test_reference_extraction_from_tool_message() -> None:
     assert len(references) == 2
     assert references[0].id == "42"
     assert references[1].url == "https://example.com/source"
+
+
+@pytest.mark.asyncio
+async def test_chat_references_include_only_current_turn_tool_results() -> None:
+    old_payload = {"items": [{"sourceType": "Board", "sourceId": "1699", "title": "Old festival"}]}
+    previous_messages = [HumanMessage(content="old question"), ToolMessage(content=json.dumps(old_payload), tool_call_id="old-tool", artifact={"structured_content": old_payload})]
+
+    class FakeAgent:
+        async def aget_state(self, _config):
+            return SimpleNamespace(values={"messages": previous_messages})
+
+        async def ainvoke(self, payload, config):
+            return {"messages": [*previous_messages, *payload["messages"], AIMessage(content="I am LocalHub assistant.")]}
+
+    service = AgentService(Settings())
+    service._agent = FakeAgent()
+    response = await service.chat(ChatRequest(message="Who are you?", language="en"), "client-a", "session-a")
+
+    assert response.answer == "I am LocalHub assistant."
+    assert response.references == []
