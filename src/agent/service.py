@@ -8,7 +8,7 @@ from contextlib import AsyncExitStack
 from typing import Any
 
 from langchain.agents import create_agent
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
 from langchain_openai import ChatOpenAI
@@ -85,15 +85,14 @@ class AgentService:
         thread_id = self.conversation_thread_id(client_id, session_id)
         config = {"recursion_limit": self.settings.agent_recursion_limit, "configurable": {"thread_id": thread_id}}
         state = await self._agent.aget_state(config)
-        messages: list[HumanMessage | AIMessage | SystemMessage] = []
+        messages: list[HumanMessage | AIMessage] = []
         
         if not state.values.get("messages"):
-            messages.append(SystemMessage(content=f"The requested answer language is {request.language}."))
             for item in request.history:
                 message_class = HumanMessage if item.role == "user" else AIMessage
                 messages.append(message_class(content=item.content))
         
-        messages.append(HumanMessage(content=request.message))
+        messages.append(self.localized_user_message(request))
 
         with tracing_context(
             enabled=self._langsmith_client is not None,
@@ -124,6 +123,10 @@ class AgentService:
     @staticmethod
     def conversation_thread_id(client_id: str, session_id: str) -> str:
         return hashlib.sha256(f"{client_id}:{session_id}".encode()).hexdigest()
+
+    @staticmethod
+    def localized_user_message(request: ChatRequest) -> HumanMessage:
+        return HumanMessage(content=f"[LOCALHUB_RESPONSE_LANGUAGE={request.language}]\n{request.message}")
 
     def _mcp_connections(self) -> dict[str, dict[str, Any]]:
         local_environment = {"DATABASE_URL": self.settings.database_url, "OPENAI_EMBEDDING_MODEL": self.settings.openai_embedding_model, "FAISS_INDEX_DIR": str(self.settings.faiss_index_dir)}

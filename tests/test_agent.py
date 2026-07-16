@@ -24,6 +24,16 @@ def test_system_prompt_contains_scope_gate() -> None:
     assert "Do not ask the user for permission first" in SYSTEM_PROMPT
     assert "until web search has also been attempted" in SYSTEM_PROMPT
     assert "always call search_faiss" in SYSTEM_PROMPT
+    assert "Response language contract" in SYSTEM_PROMPT
+    assert "A newer turn's marker" in SYSTEM_PROMPT
+
+
+def test_every_user_message_contains_the_requested_language_marker() -> None:
+    korean = AgentService.localized_user_message(ChatRequest(message="부산 여행지를 추천해 주세요", language="ko"))
+    english = AgentService.localized_user_message(ChatRequest(message="Recommend a place in Busan", language="en"))
+
+    assert korean.content == "[LOCALHUB_RESPONSE_LANGUAGE=ko]\n부산 여행지를 추천해 주세요"
+    assert english.content == "[LOCALHUB_RESPONSE_LANGUAGE=en]\nRecommend a place in Busan"
 
 
 def test_mcp_connections_receive_only_required_environment() -> None:
