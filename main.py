@@ -23,8 +23,9 @@ from src.api.tourism.router import router as tourism_router
 
 from src.agent.service import AgentService
 from src.core.config import get_settings
-from src.core.database import dispose_engine, engine, ensure_database_compatibility
+from src.core.database import dispose_engine, engine
 from src.core.logging import get_logger
+from src.core.migrations import run_database_migrations
 
 
 settings = get_settings()
@@ -38,9 +39,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.agent_service = agent_service
 
     try:
-        schema_updated = await ensure_database_compatibility()
-        if schema_updated:
-            logger.info("Applied database compatibility updates")
+        await run_database_migrations()
+        logger.info("Applied pending Alembic migrations")
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
         try:

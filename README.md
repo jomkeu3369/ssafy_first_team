@@ -199,9 +199,27 @@ curl.exe -X POST "https://YOUR-SERVICE.onrender.com/api/v1/admin/data-import/boa
 
 챗봇은 로컬 SQL 및 문서 검색 결과가 없거나 질문의 일부만 답할 수 있을 정도로 부족하면 별도 확인 없이 Tavily 웹 검색을 자동 실행합니다.
 
-보드·관광지·축제·태그 응답은 `nameEn`을 포함하며 유형별로 `descriptionEn`, `summaryEn`, `categoryEn`, `addressEn`, `placeEn`, `periodEn`을 제공합니다. 영문 원본이 없는 고유명사와 주소는 한국어 원문을 폴백으로 사용합니다. 관광지와 축제 응답의 `boardId`는 가져오기 API가 생성하거나 갱신한 같은 Board 행을 가리킵니다.
+보드·관광지·축제·태그 응답은 `nameEn`을 포함하며 유형별로 `descriptionEn`, `summaryEn`, `categoryEn`, `addressEn`, `placeEn`, `periodEn`을 제공합니다. 영문 원본이 없는 필드는 한국어를 잘못 복사하지 않고 빈 값으로 제공하며, 관리자 번역 API로 영문 값을 채울 수 있습니다. 관광지와 축제 응답의 `boardId`는 가져오기 API가 생성하거나 갱신한 같은 Board 행을 가리킵니다.
 
 `GET /api/v1/posts/popular?page=1&size=10`은 모든 게시판의 게시글을 좋아요·댓글·조회 수 순으로 통합 조회합니다.
+
+## Render DB 영속 배포
+
+Render의 기본 파일시스템은 재배포 시 초기화되므로 SQLite를 유지하려면 서비스의 **Disks** 메뉴에서 영속 디스크를 `/var/data`에 연결하고 다음 환경 변수를 설정합니다.
+
+```dotenv
+DATABASE_URL=sqlite+aiosqlite:////var/data/localhub.db
+```
+
+Start Command는 다음과 같이 설정합니다.
+
+```bash
+bash scripts/start.sh
+```
+
+시작 스크립트는 영속 디스크에 DB가 처음 생성되는 경우에만 저장소의 `data/localhub.db`를 복사합니다. 이후 배포에서는 기존 파일을 덮어쓰지 않고 `alembic upgrade head`만 실행합니다. 버전 정보가 없던 기존 DB는 현재 데이터를 유지한 채 안전 기준 리비전을 기록한 후 증분 마이그레이션을 적용합니다. 애플리케이션 시작 과정에도 같은 Alembic 검사가 있어 Start Command가 기존 명령으로 남아 있어도 스키마 마이그레이션은 실행됩니다.
+
+Render의 Pre-Deploy Command는 연결된 영속 디스크에 접근할 수 없으므로 SQLite 마이그레이션 용도로 사용하지 않습니다.
 
 ## ID 발급 규칙
 
