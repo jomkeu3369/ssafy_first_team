@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -6,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.api.post.passwords import hash_password, verify_password
+from src.api.post import router as post_router_module
 from src.api.post.router import router
 from src.api.post.translation import TranslatedPost, TranslationFailedError, get_post_translator
 from src.core.database import get_db_session
@@ -51,8 +53,14 @@ def test_password_hash_is_salted_and_verifiable() -> None:
 
 
 @pytest.mark.asyncio
-async def test_post_api_crud_search_view_and_password_verify() -> None:
+async def test_post_api_crud_search_view_and_password_verify(monkeypatch: pytest.MonkeyPatch) -> None:
     app, engine, session_factory = await _app_with_database()
+    notifications = []
+
+    async def capture_post_created(post_id: int, board_id: int, title: str, created_at: str) -> None:
+        notifications.append({"postId": post_id, "boardId": board_id, "title": title, "createdAt": created_at})
+
+    monkeypatch.setattr(post_router_module.realtime_manager, "broadcast_post_created", capture_post_created)
     transport = ASGITransport(app=app)
     client_id = str(uuid4())
     spoofed_author = str(uuid4())
@@ -79,6 +87,10 @@ async def test_post_api_crud_search_view_and_password_verify() -> None:
     assert created.json()["titleEn"] == "EN: 해운대 야경"
     assert created.json()["contentKr"] == "달맞이길 전망대 후기"
     assert created.json()["contentEn"] == "EN: 달맞이길 전망대 후기"
+    assert created.json()["createdAt"].endswith("+09:00")
+    assert created.json()["updatedAt"].endswith("+09:00")
+    assert datetime.fromisoformat(created.json()["createdAt"]).utcoffset() == timedelta(hours=9)
+    assert notifications == [{"postId": 1, "boardId": 0, "title": "해운대 야경", "createdAt": created.json()["createdAt"]}]
     assert "password" not in created.json()
     assert created.json()["tags"] == [{"tagId": 1, "name": "관광지", "nameEn": "Attraction", "category": "ATTRACTION"}]
     assert created.json()["media"] == [{"mediaId": 12, "imageUrl": "https://example.com/night.jpg"}]
@@ -92,6 +104,8 @@ async def test_post_api_crud_search_view_and_password_verify() -> None:
     assert updated.status_code == 200 and updated.json()["title"] == "수정된 제목"
     assert updated.json()["titleKr"] == "수정된 제목"
     assert updated.json()["titleEn"] == "EN: 수정된 제목"
+    assert updated.json()["createdAt"] == created.json()["createdAt"]
+    assert datetime.fromisoformat(updated.json()["updatedAt"]) >= datetime.fromisoformat(created.json()["updatedAt"])
     assert wrong_delete.status_code == 401
     assert deleted.status_code == 204
     assert missing.status_code == 404 and missing.json() == {"message": "게시글을 찾을 수 없습니다."}

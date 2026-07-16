@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base
@@ -35,6 +36,8 @@ class Post(Base):
     password: Mapped[str] = mapped_column(String, nullable=False)
     view_count: Mapped[int] = mapped_column("viewCount", Integer, nullable=False)
     like_count: Mapped[int] = mapped_column("likeCount", Integer, nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column("createdAt", DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column("updatedAt", DateTime(timezone=True), nullable=True)
 
     board: Mapped[Board] = relationship(back_populates="posts")
     comments: Mapped[list[Comment]] = relationship(back_populates="post")

@@ -138,6 +138,29 @@ ALTER TABLE post ADD COLUMN "titleKr" VARCHAR(500) NULL;
 ALTER TABLE post ADD COLUMN "titleEn" VARCHAR(500) NULL;
 ALTER TABLE post ADD COLUMN "contentKr" TEXT NULL;
 ALTER TABLE post ADD COLUMN "contentEn" TEXT NULL;
+ALTER TABLE post ADD COLUMN "createdAt" DATETIME NULL;
+ALTER TABLE post ADD COLUMN "updatedAt" DATETIME NULL;
+```
+
+## WebSocket 실시간 알림
+
+프론트엔드는 송신 없이 다음 주소로 연결해 이벤트를 수신합니다. 브라우저별 익명 UUID를 `clientId`로 전달하면 여러 탭을 열어도 한 명으로 집계합니다.
+
+```text
+ws://localhost:8000/api/v1/ws?clientId=UUID
+wss://YOUR-RENDER-SERVICE.onrender.com/api/v1/ws?clientId=UUID
+```
+
+연결·해제 시에는 고유 클라이언트 수를 알립니다.
+
+```json
+{"event":"presence.updated","data":{"connectedCount":14}}
+```
+
+게시글 생성 트랜잭션이 커밋되면 모든 연결에 새 글 알림을 전송합니다. `createdAt`은 KST 오프셋이 포함된 ISO 8601 값입니다.
+
+```json
+{"event":"post.created","data":{"postId":101,"boardId":1,"title":"해운대 야경을 보기 좋은 장소","createdAt":"2026-07-16T15:30:00+09:00"}}
 ```
 
 ## 부산 JSON 데이터 업로드

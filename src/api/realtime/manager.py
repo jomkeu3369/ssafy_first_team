@@ -9,6 +9,7 @@ class ConnectionManager:
     def __init__(self) -> None:
         self._connections: dict[str, set[WebSocket]] = defaultdict(set)
         self._lock = asyncio.Lock()
+        self._broadcast_lock = asyncio.Lock()
 
     @property
     def connected_count(self) -> int:
@@ -33,11 +34,12 @@ class ConnectionManager:
         async with self._lock:
             targets = [(client_id, websocket) for client_id, connections in self._connections.items() for websocket in connections]
         failed: list[tuple[str, WebSocket]] = []
-        for client_id, websocket in targets:
-            try:
-                await websocket.send_json(payload)
-            except Exception:
-                failed.append((client_id, websocket))
+        async with self._broadcast_lock:
+            for client_id, websocket in targets:
+                try:
+                    await websocket.send_json(payload)
+                except Exception:
+                    failed.append((client_id, websocket))
         if failed:
             async with self._lock:
                 for client_id, websocket in failed:
@@ -51,7 +53,7 @@ class ConnectionManager:
     async def broadcast_presence(self) -> None:
         await self.broadcast({"event": "presence.updated", "data": {"connectedCount": self.connected_count}})
 
-    async def broadcast_post_created(self, post_id: int, board_id: int, title: str, created_at: str | None) -> None:
+    async def broadcast_post_created(self, post_id: int, board_id: int, title: str, created_at: str) -> None:
         await self.broadcast({"event": "post.created", "data": {"postId": post_id, "boardId": board_id, "title": title, "createdAt": created_at}})
 
 

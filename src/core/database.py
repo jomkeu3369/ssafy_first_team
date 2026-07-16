@@ -93,7 +93,7 @@ async def _normalize_sqlite_ids(connection) -> bool:
 
 async def _apply_compatibility_updates(connection, normalize_ids: bool) -> bool:
     changed = False
-    compatibility_columns = {"Board": {"image": "VARCHAR(2000) NULL", "contentId": "VARCHAR(100) NULL", "address": "VARCHAR(500) NULL", "eventStartDate": "VARCHAR(8) NULL", "eventEndDate": "VARCHAR(8) NULL", "eventPlace": "VARCHAR(500) NULL"}, "post": {"titleKr": "VARCHAR(500) NULL", "titleEn": "VARCHAR(500) NULL", "contentKr": "TEXT NULL", "contentEn": "TEXT NULL"}}
+    compatibility_columns = {"Board": {"image": "VARCHAR(2000) NULL", "contentId": "VARCHAR(100) NULL", "address": "VARCHAR(500) NULL", "eventStartDate": "VARCHAR(8) NULL", "eventEndDate": "VARCHAR(8) NULL", "eventPlace": "VARCHAR(500) NULL"}, "post": {"titleKr": "VARCHAR(500) NULL", "titleEn": "VARCHAR(500) NULL", "contentKr": "TEXT NULL", "contentEn": "TEXT NULL", "createdAt": "DATETIME NULL", "updatedAt": "DATETIME NULL"}}
     for table, missing_columns in compatibility_columns.items():
         columns = await connection.run_sync(_columns, table)
         if columns is None:

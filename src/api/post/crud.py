@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime, timedelta, timezone
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -43,6 +44,14 @@ class MediaConflictError(Exception):
 _post_write_lock = asyncio.Lock()
 _view_lock = asyncio.Lock()
 _viewed_clients: set[tuple[int, str]] = set()
+KST = timezone(timedelta(hours=9))
+
+
+def _as_kst(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    aware = value.replace(tzinfo=UTC) if value.tzinfo is None else value
+    return aware.astimezone(KST)
 
 
 async def _next_post_id(db: AsyncSession) -> int:
@@ -61,7 +70,7 @@ def _to_response(row) -> PostResponse:
     post = row[0]
     tags = [TagResponse(tag_id=tag.tag_id, name=tag.name, name_en=tag_name_en(tag.tag_id, tag.name), category=tag_category(tag.tag_id)) for tag in sorted(post.tags, key=lambda item: item.tag_id)]
     media = [MediaResponse(media_id=item.media_id, image_url=item.image_url) for item in post.media]
-    return PostResponse(post_id=post.post_id, board_id=post.board_id, title=post.title, title_kr=post.title_kr or post.title, title_en=post.title_en or post.title, author=post.author, content=post.content, content_kr=post.content_kr or post.content, content_en=post.content_en or post.content, view_count=post.view_count, like_count=post.like_count, comment_count=row.comment_count or 0, created_at=None, updated_at=None, tags=tags, media=media)
+    return PostResponse(post_id=post.post_id, board_id=post.board_id, title=post.title, title_kr=post.title_kr or post.title, title_en=post.title_en or post.title, author=post.author, content=post.content, content_kr=post.content_kr or post.content, content_en=post.content_en or post.content, view_count=post.view_count, like_count=post.like_count, comment_count=row.comment_count or 0, created_at=_as_kst(post.created_at), updated_at=_as_kst(post.updated_at), tags=tags, media=media)
 
 
 async def _resolve_tags(db: AsyncSession, payload: PostWrite) -> list[Tag]:
@@ -129,7 +138,8 @@ async def create_post(db: AsyncSession, board_id: int, payload: PostWrite, autho
 
     async with _post_write_lock:
         tags = await _resolve_tags(db, payload)
-        post = Post(post_id=await _next_post_id(db), board_id=board_id, title=payload.title, title_kr=translated.title_kr, title_en=translated.title_en, author=author, content=payload.content, content_kr=translated.content_kr, content_en=translated.content_en, password=hash_password(payload.password), view_count=0, like_count=0)
+        now = datetime.now(UTC)
+        post = Post(post_id=await _next_post_id(db), board_id=board_id, title=payload.title, title_kr=translated.title_kr, title_en=translated.title_en, author=author, content=payload.content, content_kr=translated.content_kr, content_en=translated.content_en, password=hash_password(payload.password), view_count=0, like_count=0, created_at=now, updated_at=now)
         post.tags = tags
         db.add(post)
 
@@ -162,6 +172,7 @@ async def update_post(db: AsyncSession, post_id: int, payload: PostWrite, transl
     post.content = payload.content
     post.content_kr = translated.content_kr
     post.content_en = translated.content_en
+    post.updated_at = datetime.now(UTC)
     post.tags = await _resolve_tags(db, payload)
     try:
         await _replace_media(db, post_id, payload)

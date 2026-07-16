@@ -176,9 +176,13 @@ def test_websocket_counts_unique_clients_with_camel_case() -> None:
             with client.websocket_connect(f"/api/v1/ws?clientId={client_id}") as second:
                 assert first.receive_json() == {"event": "presence.updated", "data": {"connectedCount": 1}}
                 assert second.receive_json() == {"event": "presence.updated", "data": {"connectedCount": 1}}
-                manager_event = {"event": "post.created", "data": {"postId": 1}}
+                manager_event = {"event": "post.created", "data": {"postId": 1, "boardId": 0, "title": "새 게시글", "createdAt": "2026-07-16T12:00:00+09:00"}}
                 client.portal.call(manager.broadcast, manager_event)
                 assert first.receive_json() == manager_event
                 assert second.receive_json() == manager_event
+            assert first.receive_json() == {"event": "presence.updated", "data": {"connectedCount": 1}}
+            with client.websocket_connect(f"/api/v1/ws?clientId={uuid4()}") as third:
+                assert first.receive_json() == {"event": "presence.updated", "data": {"connectedCount": 2}}
+                assert third.receive_json() == {"event": "presence.updated", "data": {"connectedCount": 2}}
 
     assert manager.connected_count == 0

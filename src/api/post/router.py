@@ -47,8 +47,8 @@ async def get_post(post_id: Annotated[int, Path(ge=0)], client_id: Annotated[UUI
 async def create_post(board_id: Annotated[int, Path(ge=0)], payload: PostWrite, client_id: Annotated[UUID, Header(alias="X-Client-Id")], db: Annotated[AsyncSession, Depends(get_db_session)], translator: Annotated[PostTranslator, Depends(get_post_translator)]) -> PostResponse | JSONResponse:
     try:
         created = await crud.create_post(db, board_id, payload, str(client_id), translator)
-        created_at = created.created_at.isoformat() if created.created_at is not None else None
-        await realtime_manager.broadcast_post_created(created.post_id, created.board_id, created.title, created_at)
+        if created.created_at is not None:
+            await realtime_manager.broadcast_post_created(created.post_id, created.board_id, created.title, created.created_at.isoformat())
         return created
     except crud.BoardNotFoundError:
         return _error(status.HTTP_404_NOT_FOUND, "게시판을 찾을 수 없습니다.")

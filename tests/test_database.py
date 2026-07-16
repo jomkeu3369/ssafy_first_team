@@ -50,7 +50,7 @@ async def test_database_compatibility_adds_post_translation_columns_once() -> No
     assert await ensure_database_compatibility(target_engine) is False
     async with target_engine.connect() as connection:
         columns = await connection.run_sync(_column_names, "post")
-    assert {"titleKr", "titleEn", "contentKr", "contentEn"} <= columns
+    assert {"titleKr", "titleEn", "contentKr", "contentEn", "createdAt", "updatedAt"} <= columns
     await target_engine.dispose()
 
 
