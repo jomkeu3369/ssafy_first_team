@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from main import app
 from src.agent.service import AgentService
+from src.core.config import Settings
 
 
 @pytest.fixture(autouse=True)
@@ -43,6 +44,12 @@ def test_cors_preflight() -> None:
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == ("https://saffybuffy.netlify.app")
+
+
+def test_cors_origins_always_include_normalized_public_frontend() -> None:
+    settings = Settings(public_frontend_origin="https://saffybuffy.netlify.app/", frontend_origins="http://localhost:5173,https://saffybuffy.netlify.app/")
+
+    assert settings.cors_origins == ["https://saffybuffy.netlify.app", "http://localhost:5173"]
 
 
 def test_chat_is_unavailable_without_agent_configuration() -> None:

@@ -34,9 +34,8 @@ class Settings(BaseSettings):
     langsmith_api_key: str | None = None
     langsmith_project: str = "localhub-rag-agent"
 
-    frontend_origins: str = (
-        "https://saffybuffy.netlify.app"
-    )
+    public_frontend_origin: str = "https://saffybuffy.netlify.app"
+    frontend_origins: str = "http://localhost:5173"
     cors_allow_credentials: bool = False
 
     enable_openapi: bool = True
@@ -55,11 +54,9 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> list[str]:
-        return [
-            origin.strip()
-            for origin in self.frontend_origins.split(",")
-            if origin.strip()
-        ]
+        candidates = [self.public_frontend_origin, *self.frontend_origins.split(",")]
+        normalized = [origin.strip().rstrip("/") for origin in candidates if origin.strip()]
+        return list(dict.fromkeys(normalized))
 
     @model_validator(mode="after")
     def validate_cors_credentials(self) -> Self:
