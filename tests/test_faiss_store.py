@@ -37,7 +37,7 @@ async def test_faiss_store_builds_from_database_and_rebuilds_after_change(tmp_pa
     monkeypatch.setattr(faiss_store.settings, "openai_api_key", "openai-test")
     monkeypatch.setattr(faiss_store.settings, "openai_embedding_model", "embedding-test")
     monkeypatch.setattr(faiss_store.settings, "faiss_index_dir", tmp_path)
-    monkeypatch.setattr(faiss_store, "OpenAIEmbeddings", FakeEmbeddings)
+    monkeypatch.setattr(faiss_store, "_embeddings_class", lambda: FakeEmbeddings)
     monkeypatch.setattr(faiss_store, "_cached_bundle", None)
     monkeypatch.setattr(faiss_store, "_cached_embedding_model", None)
     FakeEmbeddings.calls = 0

@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import faiss
-import numpy as np
-from langchain_openai import OpenAIEmbeddings
 from mcp.server.fastmcp import FastMCP
 
 from src.core.config import get_settings
@@ -25,6 +22,10 @@ async def search_faiss_index(query: str, limit: int = 5) -> dict[str, Any]:
         bundle = await ensure_vector_store()
     except VectorStoreError:
         return {"items": [], "notice": "FAISS index could not be prepared."}
+    from langchain_openai import OpenAIEmbeddings
+    import faiss
+    import numpy as np
+
     embeddings = OpenAIEmbeddings(model=settings.openai_embedding_model, api_key=settings.openai_api_key)
     query_vector = np.asarray([await embeddings.aembed_query(query)], dtype="float32")
     faiss.normalize_L2(query_vector)

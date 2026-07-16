@@ -10,9 +10,6 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-import faiss
-import numpy as np
-from langchain_openai import OpenAIEmbeddings
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -53,6 +50,24 @@ _cached_embedding_model: str | None = None
 
 class VectorStoreError(Exception):
     pass
+
+
+def _faiss_module():
+    import faiss
+
+    return faiss
+
+
+def _numpy_module():
+    import numpy
+
+    return numpy
+
+
+def _embeddings_class():
+    from langchain_openai import OpenAIEmbeddings
+
+    return OpenAIEmbeddings
 
 
 def _document(content: str, source_type: str, source_id: Any, title: str, address: str | None, image_url: str | None, category: str | None) -> dict[str, Any]:
@@ -101,6 +116,7 @@ async def vector_store_status(target_engine: AsyncEngine = engine) -> VectorStor
 
 
 def _load_existing(index_dir: Path, fingerprint: str, embedding_model: str) -> VectorStoreBundle | None:
+    faiss = _faiss_module()
     index_path, documents_path, manifest_path = _paths(index_dir)
     if not index_path.exists() or not documents_path.exists() or not manifest_path.exists():
         return None
@@ -122,7 +138,8 @@ def _document_key(document: dict[str, Any]) -> str:
     return hashlib.sha256(serialized.encode()).hexdigest()
 
 
-def _load_reusable_vectors(index_dir: Path, embedding_model: str) -> dict[str, np.ndarray]:
+def _load_reusable_vectors(index_dir: Path, embedding_model: str) -> dict[str, Any]:
+    faiss = _faiss_module()
     index_path, documents_path, manifest_path = _paths(index_dir)
     if not index_path.exists() or not documents_path.exists() or not manifest_path.exists():
         return {}
@@ -139,12 +156,13 @@ def _load_reusable_vectors(index_dir: Path, embedding_model: str) -> dict[str, n
     return {_document_key(document): index.reconstruct(position) for position, document in enumerate(documents)}
 
 
-async def _document_vectors(documents: list[dict[str, Any]], reusable: dict[str, np.ndarray]) -> np.ndarray:
+async def _document_vectors(documents: list[dict[str, Any]], reusable: dict[str, Any]) -> Any:
+    np = _numpy_module()
     keys = [_document_key(document) for document in documents]
     missing_positions = [position for position, key in enumerate(keys) if key not in reusable]
-    new_vectors: np.ndarray | None = None
+    new_vectors: Any = None
     if missing_positions:
-        embeddings = OpenAIEmbeddings(model=settings.openai_embedding_model, api_key=settings.openai_api_key)
+        embeddings = _embeddings_class()(model=settings.openai_embedding_model, api_key=settings.openai_api_key)
         contents = [documents[position]["content"] for position in missing_positions]
         new_vectors = np.asarray(await embeddings.aembed_documents(contents), dtype="float32")
         if new_vectors.ndim != 2 or new_vectors.shape[0] != len(missing_positions) or new_vectors.shape[1] == 0:
@@ -165,6 +183,7 @@ async def _document_vectors(documents: list[dict[str, Any]], reusable: dict[str,
 
 
 def _write_bundle(index_dir: Path, index: Any, documents: list[dict[str, Any]], fingerprint: str, embedding_model: str) -> None:
+    faiss = _faiss_module()
     index_dir.mkdir(parents=True, exist_ok=True)
     token = uuid4().hex
     temporary_index = index_dir / f".{token}.{INDEX_FILE}"
@@ -217,7 +236,8 @@ async def _ensure_vector_store(force: bool, target_engine: AsyncEngine) -> Vecto
         
         reusable = {} if force else await asyncio.to_thread(_load_reusable_vectors, settings.faiss_index_dir, settings.openai_embedding_model)
         vectors = await _document_vectors(documents, reusable)
-        
+
+        faiss = _faiss_module()
         faiss.normalize_L2(vectors)
         index = faiss.IndexFlatIP(vectors.shape[1])
         index.add(vectors)
