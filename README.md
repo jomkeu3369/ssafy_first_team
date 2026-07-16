@@ -1,5 +1,7 @@
 # LocalHub AI Backend
 
+Remote ngrok Vector MCP setup: [docs/remote-vector-mcp.md](docs/remote-vector-mcp.md)
+
 부산 관광·커뮤니티 정보를 답변하는 FastAPI 백엔드입니다. 일반 백엔드 기능은 다른 팀원이 담당하고, 이 저장소의 AI 영역은 LangChain `create_agent`와 두 개의 로컬 MCP 서버로 구성합니다.
 
 ## 구조

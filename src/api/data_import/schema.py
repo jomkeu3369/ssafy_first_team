@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -37,6 +39,11 @@ class FaissIndexStatusResponse(BaseModel):
     fingerprint: str
     embedding_model: str | None = Field(serialization_alias="embeddingModel")
     built_at: str | None = Field(serialization_alias="builtAt")
+
+
+class SearchDocumentExportResponse(BaseModel):
+    documents: list[dict[str, Any]]
+    fingerprint: str
 
 
 class ErrorResponse(BaseModel):

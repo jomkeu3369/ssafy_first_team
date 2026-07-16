@@ -9,6 +9,7 @@ from typing import Any
 
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.tools import StructuredTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
 from langchain_openai import ChatOpenAI
@@ -19,6 +20,10 @@ from langsmith.run_helpers import tracing_context
 from src.agent.prompts import SYSTEM_PROMPT
 from src.agent.schemas import ChatRequest, ChatResponse, Reference
 from src.core.config import PROJECT_ROOT, Settings
+from src.core.logging import get_logger
+
+
+logger = get_logger()
 
 
 class AgentService:
@@ -45,9 +50,15 @@ class AgentService:
         stack = AsyncExitStack()
         try:
             tools = []
-            for server_name in connections:
-                session = await stack.enter_async_context(client.session(server_name))
-                tools.extend(await load_mcp_tools(session, server_name=server_name))
+            for server_name, connection in connections.items():
+                if server_name == "vector" and self.settings.vector_mcp_url:
+                    tools.append(self._remote_vector_tool(connection))
+                    continue
+                try:
+                    session = await stack.enter_async_context(client.session(server_name))
+                    tools.extend(await load_mcp_tools(session, server_name=server_name))
+                except Exception as exc:
+                    logger.warning("MCP server '%s' is unavailable and will be skipped: %s", server_name, exc)
 
             model = ChatOpenAI(
                 model=self.settings.openai_model,
@@ -129,15 +140,40 @@ class AgentService:
         return HumanMessage(content=f"[LOCALHUB_RESPONSE_LANGUAGE={request.language}]\n{request.message}")
 
     def _mcp_connections(self) -> dict[str, dict[str, Any]]:
-        local_environment = {"DATABASE_URL": self.settings.database_url, "OPENAI_EMBEDDING_MODEL": self.settings.openai_embedding_model, "FAISS_INDEX_DIR": str(self.settings.faiss_index_dir)}
+        database_environment = {"DATABASE_URL": self.settings.database_url}
+        vector_environment = {"DATABASE_URL": self.settings.database_url, "OPENAI_EMBEDDING_MODEL": self.settings.openai_embedding_model, "FAISS_INDEX_DIR": str(self.settings.faiss_index_dir)}
         if self.settings.openai_api_key:
-            local_environment["OPENAI_API_KEY"] = self.settings.openai_api_key
+            vector_environment["OPENAI_API_KEY"] = self.settings.openai_api_key
 
         web_environment = {}
         if self.settings.tavily_api_key:
             web_environment["TAVILY_API_KEY"] = self.settings.tavily_api_key
 
-        return {"local": self._stdio_connection("src.mcp_servers.local_search", local_environment), "web": self._stdio_connection("src.mcp_servers.web_search", web_environment)}
+        vector_connection = self._vector_connection(vector_environment)
+        return {"database": self._stdio_connection("src.mcp_servers.database_search", database_environment), "vector": vector_connection, "web": self._stdio_connection("src.mcp_servers.web_search", web_environment)}
+
+    def _vector_connection(self, environment: dict[str, str]) -> dict[str, Any]:
+        if not self.settings.vector_mcp_url:
+            return self._stdio_connection("src.mcp_servers.vector_search", environment)
+
+        headers = {}
+        if self.settings.vector_mcp_api_key:
+            headers["Authorization"] = f"Bearer {self.settings.vector_mcp_api_key}"
+        return {"transport": "streamable_http", "url": self.settings.vector_mcp_url, "headers": headers, "timeout": self.settings.vector_mcp_timeout_seconds, "sse_read_timeout": self.settings.vector_mcp_timeout_seconds}
+
+    def _remote_vector_tool(self, connection: dict[str, Any]) -> StructuredTool:
+        async def remote_search(query: str, limit: int = 5) -> dict[str, Any]:
+            client = MultiServerMCPClient({"vector": connection})
+            try:
+                async with client.session("vector") as session:
+                    remote_tools = await load_mcp_tools(session, server_name="vector")
+                    search_tool = next(tool for tool in remote_tools if tool.name == "search_faiss")
+                    return await search_tool.ainvoke({"query": query, "limit": limit})
+            except Exception as exc:
+                logger.warning("Remote Vector MCP search is unavailable: %s", exc)
+                return {"items": [], "notice": "Remote vector search is temporarily unavailable. Continue with SQL and web search."}
+
+        return StructuredTool.from_function(coroutine=remote_search, name="search_faiss", description="Semantically search synchronized LocalHub Board and post data through the remote Vector MCP server.")
 
     @staticmethod
     def _stdio_connection(module: str, environment: dict[str, str]) -> dict[str, Any]:

@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import json
 import os
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import httpx
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -23,6 +26,7 @@ MANIFEST_FILE = "manifest.json"
 MAX_DOCUMENT_CHARACTERS = 6000
 settings = get_settings()
 _build_lock = asyncio.Lock()
+_remote_source_lock = asyncio.Lock()
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +50,7 @@ class VectorStoreStatus:
 
 _cached_bundle: VectorStoreBundle | None = None
 _cached_embedding_model: str | None = None
+_remote_source_cache: tuple[list[dict[str, Any]], str, float] | None = None
 
 
 class VectorStoreError(Exception):
@@ -74,7 +79,7 @@ def _document(content: str, source_type: str, source_id: Any, title: str, addres
     return {"content": content[:MAX_DOCUMENT_CHARACTERS], "metadata": {"source_type": source_type, "source_id": str(source_id), "title": title, "address": address, "image_url": image_url, "category": category}}
 
 
-async def load_search_documents(target_engine: AsyncEngine = engine) -> tuple[list[dict[str, Any]], str]:
+async def load_database_search_documents(target_engine: AsyncEngine = engine) -> tuple[list[dict[str, Any]], str]:
     documents: list[dict[str, Any]] = []
     async with target_engine.connect() as connection:
         tables = {row[0] for row in await connection.execute(text("SELECT name FROM sqlite_master WHERE type = 'table'"))}
@@ -96,6 +101,66 @@ async def load_search_documents(target_engine: AsyncEngine = engine) -> tuple[li
 
     serialized = json.dumps(documents, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return documents, hashlib.sha256(serialized.encode()).hexdigest()
+
+
+def _valid_remote_documents(payload: Any) -> tuple[list[dict[str, Any]], str]:
+    if not isinstance(payload, dict) or not isinstance(payload.get("documents"), list) or not isinstance(payload.get("fingerprint"), str):
+        raise VectorStoreError("Vector source returned an invalid document payload")
+    documents = payload["documents"]
+    for document in documents:
+        if not isinstance(document, dict) or not isinstance(document.get("content"), str) or not isinstance(document.get("metadata"), dict):
+            raise VectorStoreError("Vector source returned an invalid document")
+    serialized = json.dumps(documents, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    fingerprint = hashlib.sha256(serialized.encode()).hexdigest()
+    if not hmac.compare_digest(fingerprint, payload["fingerprint"]):
+        raise VectorStoreError("Vector source fingerprint does not match its documents")
+    return documents, fingerprint
+
+
+def _persisted_remote_documents() -> tuple[list[dict[str, Any]], str] | None:
+    _index_path, documents_path, manifest_path = _paths(settings.faiss_index_dir)
+    if not documents_path.exists() or not manifest_path.exists():
+        return None
+    try:
+        documents = json.loads(documents_path.read_text(encoding="utf-8"))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        return _valid_remote_documents({"documents": documents, "fingerprint": manifest.get("fingerprint")})
+    except (OSError, ValueError, json.JSONDecodeError, VectorStoreError):
+        return None
+
+
+async def load_remote_search_documents() -> tuple[list[dict[str, Any]], str]:
+    global _remote_source_cache
+    now = time.monotonic()
+    if _remote_source_cache is not None and _remote_source_cache[2] > now:
+        return _remote_source_cache[0], _remote_source_cache[1]
+    if not settings.vector_source_url or not settings.vector_source_api_key:
+        raise VectorStoreError("VECTOR_SOURCE_URL and VECTOR_SOURCE_API_KEY must be configured")
+
+    async with _remote_source_lock:
+        now = time.monotonic()
+        if _remote_source_cache is not None and _remote_source_cache[2] > now:
+            return _remote_source_cache[0], _remote_source_cache[1]
+        try:
+            async with httpx.AsyncClient(timeout=settings.vector_source_timeout_seconds) as client:
+                response = await client.get(settings.vector_source_url, headers={"X-MCP-Sync-Key": settings.vector_source_api_key})
+                response.raise_for_status()
+            documents, fingerprint = _valid_remote_documents(response.json())
+        except (httpx.HTTPError, ValueError, VectorStoreError) as exc:
+            if _remote_source_cache is not None:
+                return _remote_source_cache[0], _remote_source_cache[1]
+            if persisted := await asyncio.to_thread(_persisted_remote_documents):
+                return persisted
+            raise VectorStoreError("Vector source could not be synchronized") from exc
+        expires_at = time.monotonic() + max(1, settings.vector_source_cache_seconds)
+        _remote_source_cache = documents, fingerprint, expires_at
+        return documents, fingerprint
+
+
+async def load_search_documents(target_engine: AsyncEngine = engine) -> tuple[list[dict[str, Any]], str]:
+    if settings.vector_source_url:
+        return await load_remote_search_documents()
+    return await load_database_search_documents(target_engine)
 
 
 def _paths(index_dir: Path) -> tuple[Path, Path, Path]:

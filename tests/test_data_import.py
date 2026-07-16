@@ -251,3 +251,24 @@ async def test_protected_faiss_rebuild_endpoint(monkeypatch: pytest.MonkeyPatch)
     assert current.json()["stale"] is False
     assert current.json()["documentCount"] == 1755
     await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_search_document_export_requires_separate_sync_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, engine, _session_factory = await _app_with_database()
+    documents = [{"content": "Busan beach", "metadata": {"source_type": "Board", "source_id": "1"}}]
+
+    async def fake_documents():
+        return documents, "document-fingerprint"
+
+    monkeypatch.setattr(router_module.settings, "vector_source_api_key", "sync-secret")
+    monkeypatch.setattr(router_module, "load_database_search_documents", fake_documents)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        denied = await client.get("/api/v1/admin/data-import/search-documents")
+        exported = await client.get("/api/v1/admin/data-import/search-documents", headers={"X-MCP-Sync-Key": "sync-secret"})
+
+    assert denied.status_code == 401
+    assert exported.status_code == 200
+    assert exported.json() == {"documents": documents, "fingerprint": "document-fingerprint"}
+    await engine.dispose()

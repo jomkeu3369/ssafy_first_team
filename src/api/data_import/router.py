@@ -7,13 +7,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.data_import import service
-from src.api.data_import.schema import BoardTranslationResponse, ErrorResponse, FaissIndexResponse, FaissIndexStatusResponse, ImportResponse
+from src.api.data_import.schema import BoardTranslationResponse, ErrorResponse, FaissIndexResponse, FaissIndexStatusResponse, ImportResponse, SearchDocumentExportResponse
 from src.api.data_import.translation import BoardTranslationFailedError, BoardTranslationUnavailableError, BoardTranslator, get_board_translator
 from src.api.comment.translation import CommentTranslationFailedError, CommentTranslationUnavailableError, CommentTranslator, get_comment_translator
 from src.api.data_import.schema import CommentTranslationResponse
 from src.core.config import get_settings
 from src.core.database import get_db_session
-from src.mcp_servers.faiss_store import VectorStoreError
+from src.mcp_servers.faiss_store import VectorStoreError, load_database_search_documents
 
 
 router = APIRouter(prefix="/admin/data-import")
@@ -27,6 +27,21 @@ def _error(status_code: int, message: str) -> JSONResponse:
 def _authorized(import_key: str | None) -> bool:
     expected = settings.data_import_api_key
     return bool(expected and import_key and hmac.compare_digest(expected, import_key))
+
+
+def _sync_authorized(sync_key: str | None) -> bool:
+    expected = settings.vector_source_api_key
+    return bool(expected and sync_key and hmac.compare_digest(expected, sync_key))
+
+
+@router.get("/search-documents", response_model=SearchDocumentExportResponse, responses={401: {"model": ErrorResponse}, 503: {"model": ErrorResponse}})
+async def export_search_documents(sync_key: Annotated[str | None, Header(alias="X-MCP-Sync-Key")] = None) -> SearchDocumentExportResponse | JSONResponse:
+    if not settings.vector_source_api_key:
+        return _error(status.HTTP_503_SERVICE_UNAVAILABLE, "Vector source synchronization is not configured.")
+    if not _sync_authorized(sync_key):
+        return _error(status.HTTP_401_UNAUTHORIZED, "Invalid vector synchronization key.")
+    documents, fingerprint = await load_database_search_documents()
+    return SearchDocumentExportResponse(documents=documents, fingerprint=fingerprint)
 
 
 @router.post("/boards", response_model=ImportResponse, response_model_by_alias=True, responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 413: {"model": ErrorResponse}, 500: {"model": ErrorResponse}, 503: {"model": ErrorResponse}})
@@ -92,6 +107,8 @@ async def rebuild_faiss_index(import_key: Annotated[str | None, Header(alias="X-
         return _error(status.HTTP_503_SERVICE_UNAVAILABLE, "데이터 import API 키가 설정되지 않았습니다.")
     if not _authorized(import_key):
         return _error(status.HTTP_401_UNAUTHORIZED, "데이터 import API 키가 올바르지 않습니다.")
+    if settings.vector_mcp_url:
+        return _error(status.HTTP_409_CONFLICT, "FAISS is managed by the remote Vector MCP server.")
     if not settings.openai_api_key:
         return _error(status.HTTP_503_SERVICE_UNAVAILABLE, "OPENAI_API_KEY가 설정되지 않았습니다.")
     try:
@@ -106,6 +123,8 @@ async def get_faiss_index_status(import_key: Annotated[str | None, Header(alias=
         return _error(status.HTTP_503_SERVICE_UNAVAILABLE, "데이터 import API 키가 설정되지 않았습니다.")
     if not _authorized(import_key):
         return _error(status.HTTP_401_UNAUTHORIZED, "데이터 import API 키가 올바르지 않습니다.")
+    if settings.vector_mcp_url:
+        return _error(status.HTTP_409_CONFLICT, "FAISS status is managed by the remote Vector MCP server.")
     try:
         return await service.get_faiss_index_status()
     except VectorStoreError:

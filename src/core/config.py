@@ -25,6 +25,16 @@ class Settings(BaseSettings):
     openai_embedding_model: str = "text-embedding-3-small"
     tavily_api_key: str | None = None
     faiss_index_dir: Path = DEFAULT_FAISS_INDEX_PATH
+    vector_mcp_url: str | None = None
+    vector_mcp_api_key: str | None = None
+    vector_mcp_timeout_seconds: float = 5.0
+    vector_mcp_host: str = "127.0.0.1"
+    vector_mcp_port: int = 8001
+    vector_mcp_public_host: str | None = None
+    vector_source_url: str | None = None
+    vector_source_api_key: str | None = None
+    vector_source_timeout_seconds: float = 30.0
+    vector_source_cache_seconds: int = 300
     media_dir: Path = DEFAULT_MEDIA_PATH
     tourism_data_dir: Path = DEFAULT_TOURISM_DATA_PATH
     data_import_api_key: str | None = None

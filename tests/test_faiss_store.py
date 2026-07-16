@@ -1,4 +1,5 @@
 import json
+import hashlib
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -21,6 +22,16 @@ class FakeEmbeddings:
         FakeEmbeddings.calls += 1
         FakeEmbeddings.embedded_documents += len(texts)
         return [[float(position + 1), float(len(content) % 7 + 1)] for position, content in enumerate(texts)]
+
+
+def test_remote_document_payload_requires_matching_fingerprint() -> None:
+    documents = [{"content": "Busan beach", "metadata": {"source_type": "Board", "source_id": "1"}}]
+    serialized = json.dumps(documents, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    fingerprint = hashlib.sha256(serialized.encode()).hexdigest()
+
+    assert faiss_store._valid_remote_documents({"documents": documents, "fingerprint": fingerprint}) == (documents, fingerprint)
+    with pytest.raises(faiss_store.VectorStoreError):
+        faiss_store._valid_remote_documents({"documents": documents, "fingerprint": "wrong"})
 
 
 @pytest.mark.asyncio

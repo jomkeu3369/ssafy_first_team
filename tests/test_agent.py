@@ -1,8 +1,10 @@
 import json
 from pathlib import Path
 
+import pytest
 from langchain_core.messages import ToolMessage
 
+from src.agent import service as service_module
 from src.agent.prompts import SYSTEM_PROMPT
 from src.agent.schemas import ChatRequest
 from src.agent.service import AgentService
@@ -40,10 +42,44 @@ def test_mcp_connections_receive_only_required_environment() -> None:
     settings = Settings(database_url="sqlite+aiosqlite:///./data/test.db", openai_api_key="openai-test", openai_embedding_model="embedding-test", tavily_api_key="tavily-test", faiss_index_dir="data/test-faiss")
     connections = AgentService(settings)._mcp_connections()
 
-    assert connections["local"]["env"] == {"DATABASE_URL": "sqlite+aiosqlite:///./data/test.db", "OPENAI_EMBEDDING_MODEL": "embedding-test", "FAISS_INDEX_DIR": str(Path("data/test-faiss")), "OPENAI_API_KEY": "openai-test"}
+    assert connections["database"]["env"] == {"DATABASE_URL": "sqlite+aiosqlite:///./data/test.db"}
+    assert connections["vector"]["env"] == {"DATABASE_URL": "sqlite+aiosqlite:///./data/test.db", "OPENAI_EMBEDDING_MODEL": "embedding-test", "FAISS_INDEX_DIR": str(Path("data/test-faiss")), "OPENAI_API_KEY": "openai-test"}
     assert connections["web"]["env"] == {"TAVILY_API_KEY": "tavily-test"}
-    assert "TAVILY_API_KEY" not in connections["local"]["env"]
+    assert "TAVILY_API_KEY" not in connections["vector"]["env"]
     assert "OPENAI_API_KEY" not in connections["web"]["env"]
+
+
+def test_remote_vector_mcp_uses_http_and_bearer_auth() -> None:
+    settings = Settings(vector_mcp_url="https://vector.example.com/mcp", vector_mcp_api_key="vector-secret", vector_mcp_timeout_seconds=3)
+    connection = AgentService(settings)._mcp_connections()["vector"]
+
+    assert connection == {"transport": "streamable_http", "url": "https://vector.example.com/mcp", "headers": {"Authorization": "Bearer vector-secret"}, "timeout": 3, "sse_read_timeout": 3}
+
+
+@pytest.mark.asyncio
+async def test_remote_vector_tool_returns_fallback_when_tunnel_is_offline(monkeypatch: pytest.MonkeyPatch) -> None:
+    class BrokenSession:
+        async def __aenter__(self):
+            raise OSError("tunnel offline")
+
+        async def __aexit__(self, _exc_type, _exc, _traceback):
+            return False
+
+    class BrokenClient:
+        def __init__(self, _connections):
+            pass
+
+        def session(self, _server_name: str) -> BrokenSession:
+            return BrokenSession()
+
+    monkeypatch.setattr(service_module, "MultiServerMCPClient", BrokenClient)
+    service = AgentService(Settings(vector_mcp_url="https://vector.example.com/mcp", vector_mcp_api_key="secret"))
+    tool = service._remote_vector_tool(service._mcp_connections()["vector"])
+
+    result = await tool.ainvoke({"query": "Busan beach", "limit": 5})
+
+    assert result["items"] == []
+    assert "SQL and web search" in result["notice"]
 
 
 def test_conversation_thread_id_is_stable_and_isolated() -> None:
