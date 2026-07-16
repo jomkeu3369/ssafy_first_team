@@ -209,6 +209,12 @@ Board는 DB와 API 응답에서 `nameKr/nameEn`, `categoryKr/categoryEn`, `descr
 .\scripts\translate_comments.ps1 -ImportKey "YOUR_DATA_IMPORT_API_KEY"
 ```
 
+Python에서는 다음 명령을 사용합니다.
+
+```powershell
+uv run python scripts/translate_comments.py --import-key "YOUR_DATA_IMPORT_API_KEY"
+```
+
 `GET /api/v1/posts/popular?page=1&size=10`은 모든 게시판의 게시글을 좋아요·댓글·조회 수 순으로 통합 조회합니다.
 
 ## Render DB 영속 배포
