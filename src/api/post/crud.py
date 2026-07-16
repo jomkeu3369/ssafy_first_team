@@ -106,7 +106,7 @@ async def get_post(db: AsyncSession, post_id: int) -> PostResponse | None:
     return _to_response(row) if row is not None else None
 
 
-async def get_posts(db: AsyncSession, board_id: int, keyword: str | None, sort: PostSort, page: int, size: int) -> PostPageResponse:
+async def get_posts(db: AsyncSession, board_id: int, keyword: str | None, tag_id: int | None, sort: PostSort, page: int, size: int) -> PostPageResponse:
     if await db.get(Board, board_id) is None:
         raise BoardNotFoundError
 
@@ -114,6 +114,8 @@ async def get_posts(db: AsyncSession, board_id: int, keyword: str | None, sort: 
     if keyword:
         pattern = f"%{keyword.strip()}%"
         filters.append(or_(Post.title.ilike(pattern), Post.title_kr.ilike(pattern), Post.title_en.ilike(pattern), Post.content.ilike(pattern), Post.content_kr.ilike(pattern), Post.content_en.ilike(pattern), Post.tags.any(Tag.name.ilike(pattern))))
+    if tag_id is not None:
+        filters.append(Post.tags.any(Tag.tag_id == tag_id))
 
     total = await db.scalar(select(func.count(Post.post_id)).where(*filters)) or 0
     comment_count = _comment_count()

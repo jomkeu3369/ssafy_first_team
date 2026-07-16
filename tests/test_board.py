@@ -88,7 +88,7 @@ async def test_board_api_matches_spec() -> None:
 
     assert created.status_code == 201
     assert set(created.json()) == {"boardId", "name", "nameEn", "category", "categoryEn", "description", "descriptionEn", "image", "recentPostCount", "lastActivityAt", "recentExcerpt"}
-    assert created.json()["nameEn"] == "해운대 게시판"
+    assert created.json()["nameEn"] == ""
     assert created.json()["categoryEn"] == "Haeundae"
     assert duplicate.status_code == 409
     assert duplicate.json() == {"message": "같은 이름과 카테고리의 게시판이 이미 존재합니다."}

@@ -23,9 +23,9 @@ def _error(status_code: int, message: str) -> JSONResponse:
 
 
 @router.get("/boards/{board_id}/posts", response_model=PostPageResponse, response_model_by_alias=True, responses={404: {"model": ErrorResponse}})
-async def get_posts(board_id: Annotated[int, Path(ge=0)], db: Annotated[AsyncSession, Depends(get_db_session)], keyword: Annotated[str | None, Query(min_length=1, max_length=200)] = None, sort: PostSort = PostSort.LATEST, page: Annotated[int, Query(ge=1)] = 1, size: Annotated[int, Query(ge=1, le=100)] = 10) -> PostPageResponse | JSONResponse:
+async def get_posts(board_id: Annotated[int, Path(ge=0)], db: Annotated[AsyncSession, Depends(get_db_session)], keyword: Annotated[str | None, Query(min_length=1, max_length=200)] = None, tag_id: Annotated[int | None, Query(alias="tagId", ge=1)] = None, sort: PostSort = PostSort.LATEST, page: Annotated[int, Query(ge=1)] = 1, size: Annotated[int, Query(ge=1, le=100)] = 10) -> PostPageResponse | JSONResponse:
     try:
-        return await crud.get_posts(db, board_id, keyword, sort, page, size)
+        return await crud.get_posts(db, board_id, keyword, tag_id, sort, page, size)
     except crud.BoardNotFoundError:
         return _error(status.HTTP_404_NOT_FOUND, "게시판을 찾을 수 없습니다.")
 

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from src.api.data_import import router as router_module
 from src.api.data_import import service as import_service
 from src.api.data_import.router import router
+from src.api.data_import.translation import TranslatedBoard, get_board_translator
 from src.api.tourism.router import router as tourism_router
 from src.core.database import get_db_session
 from src.models import Base
@@ -112,6 +113,45 @@ async def test_import_rejects_unknown_content_type() -> None:
 
     assert response.status_code == 400
     assert response.json() == {"message": "부산 관광 JSON 형식이 올바르지 않습니다."}
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_board_translation_backfill_persists_real_english_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    app, engine, session_factory = await _app_with_database()
+
+    class FakeTranslator:
+        async def translate(self, boards: list[Board]) -> list[TranslatedBoard]:
+            names = {"해운대 해수욕장": "Haeundae Beach", "부산 불꽃축제": "Busan Fireworks Festival"}
+            return [TranslatedBoard(board_id=board.board_id, name_en=names[board.name], description_en="English description", address_en="Busan, South Korea", event_place_en="Gwangalli Beach" if board.event_place else None) for board in boards]
+
+    app.dependency_overrides[get_board_translator] = FakeTranslator
+    monkeypatch.setattr(router_module.settings, "data_import_api_key", "test-import-secret")
+    monkeypatch.setattr(router_module.settings, "openai_api_key", "openai-test")
+    headers = {"X-Import-Key": "test-import-secret"}
+    files = [_upload("해운대 해수욕장", "관광지", "부산 해운대구", content_id="place-1"), _upload("부산 불꽃축제", "축제공연행사", "부산 수영구", content_id="festival-1", event_place="광안리")]
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post("/api/v1/admin/data-import/boards", headers=headers, files=files)
+        before = await client.get("/api/v1/tourism/festivals/festival-1")
+        translated = await client.post("/api/v1/admin/data-import/board-translations", headers=headers, params={"limit": 100})
+        attraction = await client.get("/api/v1/tourism/attractions/place-1")
+        festival = await client.get("/api/v1/tourism/festivals/festival-1")
+
+    assert before.json()["nameEn"] == ""
+    assert before.json()["placeEn"] == ""
+    assert translated.status_code == 200
+    assert translated.json() == {"requestedCount": 100, "translatedCount": 2, "remainingCount": 0}
+    assert attraction.json()["nameEn"] == "Haeundae Beach"
+    assert attraction.json()["addressEn"] == "Busan, South Korea"
+    assert festival.json()["nameEn"] == "Busan Fireworks Festival"
+    assert festival.json()["placeEn"] == "Gwangalli Beach"
+    assert all(not any("가" <= character <= "힣" for character in value) for value in (festival.json()["nameEn"], festival.json()["placeEn"], festival.json()["summaryEn"]))
+    async with session_factory() as session:
+        board = (await session.scalars(select(Board).where(Board.name == "부산 불꽃축제"))).one()
+        assert board.name_en == "Busan Fireworks Festival"
+        assert board.event_place_en == "Gwangalli Beach"
     await engine.dispose()
 
 

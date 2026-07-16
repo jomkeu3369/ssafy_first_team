@@ -24,20 +24,31 @@ MAX_DESCRIPTION_LENGTH = 1_000
 @dataclass(frozen=True, slots=True)
 class CleanBoard:
     name: str
+    name_en: str | None
     category: str
     description: str | None
+    description_en: str | None
     image: str | None
     source_content_id: str | None
     address: str | None
+    address_en: str | None
     event_start_date: str | None
     event_end_date: str | None
     event_place: str | None
+    event_place_en: str | None
 
 
 def clean_text(value: Any) -> str:
     if value is None:
         return ""
     return re.sub(r"\s+", " ", str(value)).strip()
+
+
+def english_text(value: Any, limit: int) -> str | None:
+    cleaned = clean_text(value)[:limit]
+    if not cleaned or re.search(r"[\uac00-\ud7a3]", cleaned):
+        return None
+    return cleaned
 
 
 def build_description(item: dict[str, Any]) -> str | None:
@@ -88,21 +99,48 @@ def load_boards(source_paths: list[Path]) -> tuple[list[CleanBoard], int]:
                 continue
             seen.add(key)
             address = " ".join(value for value in (clean_text(item.get("addr1")), clean_text(item.get("addr2"))) if value)[:500] or None
+            address_en = " ".join(value for value in (english_text(item.get("addr1En") or item.get("addr1_en"), 800), english_text(item.get("addr2En") or item.get("addr2_en"), 200)) if value)[:1000] or None
             boards.append(
                 CleanBoard(
                     name=name,
+                    name_en=english_text(item.get("titleEn") or item.get("title_en") or item.get("engtitle"), 200),
                     category=category,
                     description=build_description(item),
+                    description_en=english_text(item.get("descriptionEn") or item.get("description_en") or item.get("overviewEn"), 2000),
                     image=clean_text(item.get("firstimage") or item.get("firstimage2"))[:2000] or None,
                     source_content_id=clean_text(item.get("contentid"))[:100] or None,
                     address=address,
+                    address_en=address_en,
                     event_start_date=clean_text(item.get("eventstartdate"))[:8] or None,
                     event_end_date=clean_text(item.get("eventenddate"))[:8] or None,
-                    event_place=clean_text(item.get("eventplace"))[:500] or None
+                    event_place=clean_text(item.get("eventplace"))[:500] or None,
+                    event_place_en=english_text(item.get("eventplaceEn") or item.get("eventplace_en"), 1000)
                 )
             )
 
     return boards, skipped
+
+
+def update_board(row: Board, item: CleanBoard) -> bool:
+    changed = False
+    values = (("image", item.image), ("source_content_id", item.source_content_id), ("event_start_date", item.event_start_date), ("event_end_date", item.event_end_date))
+    for attribute, value in values:
+        if getattr(row, attribute) != value:
+            setattr(row, attribute, value)
+            changed = True
+    translated_values = (("description", "description_en", item.description, item.description_en), ("address", "address_en", item.address, item.address_en), ("event_place", "event_place_en", item.event_place, item.event_place_en))
+    for source_attribute, english_attribute, source_value, english_value in translated_values:
+        if getattr(row, source_attribute) != source_value:
+            setattr(row, source_attribute, source_value)
+            setattr(row, english_attribute, english_value)
+            changed = True
+        elif english_value and getattr(row, english_attribute) != english_value:
+            setattr(row, english_attribute, english_value)
+            changed = True
+    if item.name_en and row.name_en != item.name_en:
+        row.name_en = item.name_en
+        changed = True
+    return changed
 
 
 async def import_boards(boards: list[CleanBoard], update_existing: bool) -> tuple[int, int, int]:
@@ -126,27 +164,24 @@ async def import_boards(boards: list[CleanBoard], update_existing: bool) -> tupl
                 row = Board(
                     board_id=next_id,
                     name=item.name,
+                    name_en=item.name_en,
                     category=item.category,
                     description=item.description,
+                    description_en=item.description_en,
                     image=item.image,
                     source_content_id=item.source_content_id,
                     address=item.address,
+                    address_en=item.address_en,
                     event_start_date=item.event_start_date,
                     event_end_date=item.event_end_date,
-                    event_place=item.event_place
+                    event_place=item.event_place,
+                    event_place_en=item.event_place_en
                 )
                 session.add(row)
                 existing[(item.name, item.category)] = row
                 next_id += 1
                 inserted += 1
-            elif update_existing and (row.description != item.description or row.image != item.image or row.source_content_id != item.source_content_id or row.address != item.address or row.event_start_date != item.event_start_date or row.event_end_date != item.event_end_date or row.event_place != item.event_place):
-                row.description = item.description
-                row.image = item.image
-                row.source_content_id = item.source_content_id
-                row.address = item.address
-                row.event_start_date = item.event_start_date
-                row.event_end_date = item.event_end_date
-                row.event_place = item.event_place
+            elif update_existing and update_board(row, item):
                 updated += 1
             else:
                 unchanged += 1

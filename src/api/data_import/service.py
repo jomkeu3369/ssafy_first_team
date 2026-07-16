@@ -5,10 +5,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from fastapi import UploadFile
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.data_import.schema import FaissIndexResponse, FaissIndexStatusResponse, ImportResponse
+from src.api.data_import.schema import BoardTranslationResponse, FaissIndexResponse, FaissIndexStatusResponse, ImportResponse
+from src.api.data_import.translation import BoardTranslator
 from src.core.config import get_settings
 from src.mcp_servers.faiss_store import ensure_vector_store, vector_store_status
 from src.models.board import Board
@@ -35,22 +36,34 @@ class TooManyImportFilesError(Exception):
 @dataclass(frozen=True, slots=True)
 class CleanBoard:
     name: str
+    name_en: str | None
     category: str
     description: str | None
+    description_en: str | None
     image: str | None
     source_content_id: str | None
     address: str | None
+    address_en: str | None
     event_start_date: str | None
     event_end_date: str | None
     event_place: str | None
+    event_place_en: str | None
 
 
 _import_lock = asyncio.Lock()
+_translation_lock = asyncio.Lock()
 settings = get_settings()
 
 
 def _clean_text(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def _english_text(value: Any, limit: int) -> str | None:
+    cleaned = _clean_text(value)[:limit]
+    if not cleaned or re.search(r"[\uac00-\ud7a3]", cleaned):
+        return None
+    return cleaned
 
 
 def _build_description(item: dict[str, Any]) -> str | None:
@@ -100,7 +113,8 @@ async def clean_uploads(files: list[UploadFile]) -> tuple[list[CleanBoard], int,
             seen.add(key)
             image = _clean_text(item.get("firstimage") or item.get("firstimage2"))[:2000] or None
             address = " ".join(value for value in (_clean_text(item.get("addr1")), _clean_text(item.get("addr2"))) if value)[:500] or None
-            boards.append(CleanBoard(name=name, category=category, description=_build_description(item), image=image, source_content_id=_clean_text(item.get("contentid"))[:100] or None, address=address, event_start_date=_clean_text(item.get("eventstartdate"))[:8] or None, event_end_date=_clean_text(item.get("eventenddate"))[:8] or None, event_place=_clean_text(item.get("eventplace"))[:500] or None))
+            address_en = " ".join(value for value in (_english_text(item.get("addr1En") or item.get("addr1_en"), 800), _english_text(item.get("addr2En") or item.get("addr2_en"), 200)) if value)[:1000] or None
+            boards.append(CleanBoard(name=name, name_en=_english_text(item.get("titleEn") or item.get("title_en") or item.get("engtitle"), 200), category=category, description=_build_description(item), description_en=_english_text(item.get("descriptionEn") or item.get("description_en") or item.get("overviewEn"), 2000), image=image, source_content_id=_clean_text(item.get("contentid"))[:100] or None, address=address, address_en=address_en, event_start_date=_clean_text(item.get("eventstartdate"))[:8] or None, event_end_date=_clean_text(item.get("eventenddate"))[:8] or None, event_place=_clean_text(item.get("eventplace"))[:500] or None, event_place_en=_english_text(item.get("eventplaceEn") or item.get("eventplace_en"), 1000)))
             categories[category] = categories.get(category, 0) + 1
     return boards, skipped, categories
 
@@ -120,7 +134,7 @@ async def import_boards(db: AsyncSession, files: list[UploadFile], update_existi
         for item in boards:
             row = existing.get((item.name, item.category))
             if row is None:
-                row = Board(board_id=next_board_id, name=item.name, category=item.category, description=item.description, image=item.image, source_content_id=item.source_content_id, address=item.address, event_start_date=item.event_start_date, event_end_date=item.event_end_date, event_place=item.event_place)
+                row = Board(board_id=next_board_id, name=item.name, name_en=item.name_en, category=item.category, description=item.description, description_en=item.description_en, image=item.image, source_content_id=item.source_content_id, address=item.address, address_en=item.address_en, event_start_date=item.event_start_date, event_end_date=item.event_end_date, event_place=item.event_place, event_place_en=item.event_place_en)
                 db.add(row)
                 existing[(item.name, item.category)] = row
                 occupied.add(next_board_id)
@@ -128,19 +142,58 @@ async def import_boards(db: AsyncSession, files: list[UploadFile], update_existi
                 while next_board_id in occupied:
                     next_board_id += 1
                 inserted += 1
-            elif update_existing and (row.description != item.description or row.image != item.image or row.source_content_id != item.source_content_id or row.address != item.address or row.event_start_date != item.event_start_date or row.event_end_date != item.event_end_date or row.event_place != item.event_place):
-                row.description = item.description
-                row.image = item.image
-                row.source_content_id = item.source_content_id
-                row.address = item.address
-                row.event_start_date = item.event_start_date
-                row.event_end_date = item.event_end_date
-                row.event_place = item.event_place
+            elif update_existing and _update_board(row, item):
                 updated += 1
             else:
                 unchanged += 1
         await db.commit()
     return ImportResponse(source_count=len(files), inserted_count=inserted, updated_count=updated, unchanged_count=unchanged, skipped_count=skipped, categories=categories)
+
+
+def _update_board(row: Board, item: CleanBoard) -> bool:
+    changed = False
+    values = (("image", item.image), ("source_content_id", item.source_content_id), ("event_start_date", item.event_start_date), ("event_end_date", item.event_end_date))
+    for attribute, value in values:
+        if getattr(row, attribute) != value:
+            setattr(row, attribute, value)
+            changed = True
+    translated_values = (("description", "description_en", item.description, item.description_en), ("address", "address_en", item.address, item.address_en), ("event_place", "event_place_en", item.event_place, item.event_place_en))
+    for source_attribute, english_attribute, source_value, english_value in translated_values:
+        if getattr(row, source_attribute) != source_value:
+            setattr(row, source_attribute, source_value)
+            setattr(row, english_attribute, english_value)
+            changed = True
+        elif english_value and getattr(row, english_attribute) != english_value:
+            setattr(row, english_attribute, english_value)
+            changed = True
+    if item.name_en and row.name_en != item.name_en:
+        row.name_en = item.name_en
+        changed = True
+    return changed
+
+
+def _needs_translation():
+    return or_(Board.name_en.is_(None), Board.name_en == "", and_(Board.description.is_not(None), or_(Board.description_en.is_(None), Board.description_en == "")), and_(Board.address.is_not(None), or_(Board.address_en.is_(None), Board.address_en == "")), and_(Board.event_place.is_not(None), or_(Board.event_place_en.is_(None), Board.event_place_en == "")))
+
+
+async def translate_missing_boards(db: AsyncSession, translator: BoardTranslator, limit: int) -> BoardTranslationResponse:
+    async with _translation_lock:
+        boards = list((await db.scalars(select(Board).where(_needs_translation()).order_by(Board.board_id).limit(limit))).all())
+        try:
+            for start in range(0, len(boards), 20):
+                batch = boards[start:start + 20]
+                translations = await translator.translate(batch)
+                for board, translated in zip(batch, translations, strict=True):
+                    board.name_en = translated.name_en
+                    board.description_en = translated.description_en
+                    board.address_en = translated.address_en
+                    board.event_place_en = translated.event_place_en
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
+        remaining = await db.scalar(select(func.count(Board.board_id)).where(_needs_translation())) or 0
+    return BoardTranslationResponse(requested_count=limit, translated_count=len(boards), remaining_count=remaining)
 
 
 async def rebuild_faiss_index() -> FaissIndexResponse:

@@ -31,7 +31,7 @@ def _board_select():
 
 def _to_response(row) -> BoardResponse:
     board = row[0]
-    return BoardResponse(board_id=board.board_id, name=board.name, category=board.category, description=board.description, image=board.image or row.latest_image or "", recent_post_count=row.recent_post_count or 0, last_activity_at=None, recent_excerpt=row.recent_excerpt or "")
+    return BoardResponse(board_id=board.board_id, name=board.name, name_en=board.name_en or "", category=board.category, description=board.description, description_en=board.description_en, image=board.image or row.latest_image or "", recent_post_count=row.recent_post_count or 0, last_activity_at=None, recent_excerpt=row.recent_excerpt or "")
 
 
 async def create_board(db: AsyncSession, board_create: BoardCreate) -> Board:

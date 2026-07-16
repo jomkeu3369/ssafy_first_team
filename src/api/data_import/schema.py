@@ -10,6 +10,12 @@ class ImportResponse(BaseModel):
     categories: dict[str, int]
 
 
+class BoardTranslationResponse(BaseModel):
+    requested_count: int = Field(serialization_alias="requestedCount")
+    translated_count: int = Field(serialization_alias="translatedCount")
+    remaining_count: int = Field(serialization_alias="remainingCount")
+
+
 class FaissIndexResponse(BaseModel):
     indexed_count: int = Field(serialization_alias="indexedCount")
     fingerprint: str

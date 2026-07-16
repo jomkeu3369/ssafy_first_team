@@ -6,17 +6,13 @@ ATTRACTION_CATEGORY_EN = {"BEACH": "Beach", "DOWNTOWN": "Downtown", "HISTORIC": 
 def board_name_en(name: str, category: str) -> str:
     if name == "전체 자유게시판":
         return "General Community"
-    return name or BOARD_CATEGORY_EN.get(category, category)
+    return name if name and not any("가" <= character <= "힣" for character in name) else ""
 
 
 def board_description_en(description: str | None) -> str | None:
     if description is None:
         return None
-    replacements = {"주소:": "Address:", "전화:": "Phone:", "우편번호:": "Postal code:", "행사기간:": "Event period:", "행사장소:": "Venue:", "이용시간:": "Hours:"}
-    translated = description
-    for korean, english in replacements.items():
-        translated = translated.replace(korean, english)
-    return translated
+    return description if not any("가" <= character <= "힣" for character in description) else None
 
 
 def tag_name_en(tag_id: int, name: str) -> str:

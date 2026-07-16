@@ -132,7 +132,7 @@ async def test_tourism_list_detail_and_date_status(tmp_path: Path) -> None:
         await connection.run_sync(Base.metadata.create_all)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:
-        session.add_all([Board(board_id=1, name="송도 해수욕장", category="관광지", source_content_id="place-1", address="부산 서구", image="https://example.com/place.jpg"), Board(board_id=2, name="부산 테스트 축제", category="축제공연행사", source_content_id="festival-1", event_place="광안리", event_start_date="20260701", event_end_date="20260731", image="https://example.com/festival.jpg")])
+        session.add_all([Board(board_id=1, name="송도 해수욕장", name_en="Songdo Beach", category="관광지", source_content_id="place-1", address="부산 서구", address_en="Seo-gu, Busan", image="https://example.com/place.jpg"), Board(board_id=2, name="부산 테스트 축제", name_en="Busan Test Festival", category="축제공연행사", source_content_id="festival-1", event_place="광안리", event_place_en="Gwangalli Beach", event_start_date="20260701", event_end_date="20260731", image="https://example.com/festival.jpg")])
         await session.commit()
     app = FastAPI()
     app.include_router(tourism_router, prefix="/api/v1")
@@ -154,7 +154,8 @@ async def test_tourism_list_detail_and_date_status(tmp_path: Path) -> None:
     assert attractions.json()["total"] == 1
     assert attractions.json()["items"][0]["category"] == "BEACH"
     assert attractions.json()["items"][0]["boardId"] == 1
-    assert attractions.json()["items"][0]["nameEn"] == "송도 해수욕장"
+    assert attractions.json()["items"][0]["nameEn"] == "Songdo Beach"
+    assert attractions.json()["items"][0]["addressEn"] == "Seo-gu, Busan"
     assert attraction.json()["contentId"] == "place-1"
     assert attraction.json()["boardId"] == 1
     assert festival.json()["startDate"] == "2026-07-01"

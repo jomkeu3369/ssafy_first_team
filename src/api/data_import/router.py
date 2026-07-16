@@ -7,7 +7,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.data_import import service
-from src.api.data_import.schema import ErrorResponse, FaissIndexResponse, FaissIndexStatusResponse, ImportResponse
+from src.api.data_import.schema import BoardTranslationResponse, ErrorResponse, FaissIndexResponse, FaissIndexStatusResponse, ImportResponse
+from src.api.data_import.translation import BoardTranslationFailedError, BoardTranslationUnavailableError, BoardTranslator, get_board_translator
 from src.core.config import get_settings
 from src.core.database import get_db_session
 from src.mcp_servers.faiss_store import VectorStoreError
@@ -43,6 +44,25 @@ async def import_board_data(files: Annotated[list[UploadFile], File(description=
     except SQLAlchemyError:
         await db.rollback()
         return _error(status.HTTP_500_INTERNAL_SERVER_ERROR, "데이터를 DB에 저장하지 못했습니다.")
+
+
+@router.post("/board-translations", response_model=BoardTranslationResponse, response_model_by_alias=True, responses={401: {"model": ErrorResponse}, 500: {"model": ErrorResponse}, 502: {"model": ErrorResponse}, 503: {"model": ErrorResponse}})
+async def translate_board_data(db: Annotated[AsyncSession, Depends(get_db_session)], translator: Annotated[BoardTranslator, Depends(get_board_translator)], import_key: Annotated[str | None, Header(alias="X-Import-Key")] = None, limit: Annotated[int, Query(ge=1, le=100)] = 50) -> BoardTranslationResponse | JSONResponse:
+    if not settings.data_import_api_key:
+        return _error(status.HTTP_503_SERVICE_UNAVAILABLE, "데이터 import API 키가 설정되지 않았습니다.")
+    if not _authorized(import_key):
+        return _error(status.HTTP_401_UNAUTHORIZED, "데이터 import API 키가 올바르지 않습니다.")
+    if not settings.openai_api_key:
+        return _error(status.HTTP_503_SERVICE_UNAVAILABLE, "OPENAI_API_KEY가 설정되지 않았습니다.")
+    try:
+        return await service.translate_missing_boards(db, translator, limit)
+    except BoardTranslationUnavailableError:
+        return _error(status.HTTP_503_SERVICE_UNAVAILABLE, "게시판 번역 기능이 설정되지 않았습니다.")
+    except BoardTranslationFailedError:
+        return _error(status.HTTP_502_BAD_GATEWAY, "게시판 데이터를 번역하지 못했습니다.")
+    except SQLAlchemyError:
+        await db.rollback()
+        return _error(status.HTTP_500_INTERNAL_SERVER_ERROR, "게시판 번역을 DB에 저장하지 못했습니다.")
 
 
 @router.post("/faiss", response_model=FaissIndexResponse, response_model_by_alias=True, responses={401: {"model": ErrorResponse}, 500: {"model": ErrorResponse}, 503: {"model": ErrorResponse}})

@@ -21,7 +21,7 @@ def _excerpt(value: str | None, max_length: int = 300) -> str | None:
 
 async def search_all(db: AsyncSession, query: str, page: int, size: int) -> SearchResponse:
     pattern = f"%{query.strip()}%"
-    board_search = select(literal("BOARD").label("result_type"), Board.board_id.label("result_id"), Board.board_id.label("board_id"), Board.name.label("title"), Board.description.label("description"), Board.image.label("image"), Board.category.label("category")).where(or_(Board.name.ilike(pattern), Board.description.ilike(pattern), Board.category.ilike(pattern)))
+    board_search = select(literal("BOARD").label("result_type"), Board.board_id.label("result_id"), Board.board_id.label("board_id"), Board.name.label("title"), Board.description.label("description"), Board.image.label("image"), Board.category.label("category")).where(or_(Board.name.ilike(pattern), Board.name_en.ilike(pattern), Board.description.ilike(pattern), Board.description_en.ilike(pattern), Board.address.ilike(pattern), Board.address_en.ilike(pattern), Board.event_place.ilike(pattern), Board.event_place_en.ilike(pattern), Board.category.ilike(pattern)))
     post_search = select(literal("POST").label("result_type"), Post.post_id.label("result_id"), Post.board_id.label("board_id"), Post.title.label("title"), Post.content.label("description"), _latest_post_image().label("image"), literal(None).label("category")).where(or_(Post.title.ilike(pattern), Post.content.ilike(pattern), Post.tags.any(Tag.name.ilike(pattern))))
     combined = union_all(board_search, post_search).subquery()
     total = await db.scalar(select(func.count()).select_from(combined)) or 0

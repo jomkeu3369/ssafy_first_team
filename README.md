@@ -171,9 +171,9 @@ Render 환경 변수에 충분히 긴 임의 문자열을 등록합니다.
 DATA_IMPORT_API_KEY=replace-with-a-long-random-secret
 ```
 
-Swagger의 `POST /api/v1/admin/data-import/boards`에서 `부산_*.json` 파일들을 한 번에 선택하고 `X-Import-Key` 헤더에 같은 값을 전달합니다. 가져오기 API는 각 항목의 이미지 주소, 관광 콘텐츠 ID, 주소, 축제 기간과 장소를 `Board`에 저장합니다. 이후 관광지·축제 GET API는 JSON 파일이 아니라 이 DB 데이터를 직접 조회합니다. 동일한 이름과 카테고리는 다시 삽입하지 않으며, 기존 행의 관광 필드까지 보강하려면 `updateExisting=true`를 사용합니다.
+Swagger의 `POST /api/v1/admin/data-import/boards`에서 `부산_*.json` 파일들을 한 번에 선택하고 `X-Import-Key` 헤더에 같은 값을 전달합니다. 가져오기 API는 각 항목의 이미지 주소, 관광 콘텐츠 ID, 주소, 축제 기간과 장소를 `Board`에 저장합니다. 원본 JSON에 `titleEn`, `descriptionEn`, `addr1En`, `addr2En`, `eventplaceEn`이 있으면 한글이 섞이지 않은 값만 영문 컬럼에 저장합니다. 이후 관광지·축제 GET API는 JSON 파일이 아니라 이 DB 데이터를 직접 조회합니다. 동일한 이름과 카테고리는 다시 삽입하지 않으며, 기존 행의 관광 필드까지 보강하려면 `updateExisting=true`를 사용합니다.
 
-마이그레이션을 수동으로 진행하는 환경에서는 배포 전에 `Board` 테이블에 nullable `image`, `contentId`, `address`, `eventStartDate`, `eventEndDate`, `eventPlace` 컬럼을 추가해야 합니다. SQLite는 서버 시작 시 누락된 컬럼을 호환성 처리로 자동 추가합니다.
+마이그레이션을 수동으로 진행하는 환경에서는 배포 전에 `Board` 테이블에 nullable `nameEn`, `descriptionEn`, `image`, `contentId`, `address`, `addressEn`, `eventStartDate`, `eventEndDate`, `eventPlace`, `eventPlaceEn` 컬럼을 추가해야 합니다. 서버는 시작 시 누락된 컬럼을 호환성 처리로도 추가합니다.
 
 ```sql
 ALTER TABLE "Board" ADD COLUMN image VARCHAR(2000) NULL;
@@ -181,6 +181,12 @@ ALTER TABLE "Board" ADD COLUMN image VARCHAR(2000) NULL;
 
 ```powershell
 curl.exe -X POST "https://YOUR-SERVICE.onrender.com/api/v1/admin/data-import/boards?updateExisting=true" -H "X-Import-Key: YOUR_SECRET" -F "files=@C:/Users/SSAFY/Desktop/data2/부산/부산_관광지.json" -F "files=@C:/Users/SSAFY/Desktop/data2/부산/부산_축제공연행사.json"
+```
+
+원본에 영문 데이터가 없는 기존 행은 아래 API가 GPT로 최대 100개씩 번역해 `nameEn`, `descriptionEn`, `addressEn`, `eventPlaceEn`에 저장합니다. 응답의 `remainingCount`가 0이 될 때까지 반복 호출할 수 있으며 호출량만큼 OpenAI API 비용이 발생합니다. 번역 전에는 한국어를 영문 필드에 복사하지 않고 빈 값으로 응답합니다.
+
+```powershell
+curl.exe -X POST "https://YOUR-SERVICE.onrender.com/api/v1/admin/data-import/board-translations?limit=100" -H "X-Import-Key: YOUR_SECRET"
 ```
 
 ## 태그와 통합 검색

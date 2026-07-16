@@ -44,6 +44,11 @@ class BoardResponse(BaseModel):
     def default_image(cls, value: str | None) -> str:
         return value or ""
 
+    @field_validator("name_en", mode="before")
+    @classmethod
+    def default_name_en(cls, value: str | None) -> str:
+        return value or ""
+
     @model_validator(mode="after")
     def populate_english_fields(self):
         self.name_en = self.name_en or board_name_en(self.name, self.category)

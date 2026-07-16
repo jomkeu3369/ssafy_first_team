@@ -73,6 +73,8 @@ async def test_post_api_crud_search_view_and_password_verify(monkeypatch: pytest
         detail = await client.get(f"/api/v1/posts/{post_id}", headers=headers)
         duplicate_view = await client.get(f"/api/v1/posts/{post_id}", headers=headers)
         searched = await client.get("/api/v1/boards/0/posts", params={"keyword": "관광지", "sort": "latest", "page": 1, "size": 10})
+        matching_tag = await client.get("/api/v1/boards/0/posts", params={"tagId": 1})
+        missing_tag = await client.get("/api/v1/boards/0/posts", params={"tagId": 2})
         verified = await client.post(f"/api/v1/posts/{post_id}/password/verify", headers=headers, json={"password": "1234"})
         denied = await client.put(f"/api/v1/posts/{post_id}", json={**create_payload, "title": "실패", "password": "9999"})
         updated = await client.put(f"/api/v1/posts/{post_id}", json={**create_payload, "title": "수정된 제목"})
@@ -99,6 +101,8 @@ async def test_post_api_crud_search_view_and_password_verify(monkeypatch: pytest
     assert searched.status_code == 200
     assert searched.json()["total"] == 1
     assert searched.json()["items"][0]["postId"] == post_id
+    assert matching_tag.json()["total"] == 1
+    assert missing_tag.json()["total"] == 0
     assert verified.status_code == 200 and verified.json() == {"verified": True}
     assert denied.status_code == 401 and denied.json() == {"message": "비밀번호가 일치하지 않습니다."}
     assert updated.status_code == 200 and updated.json()["title"] == "수정된 제목"
@@ -113,6 +117,14 @@ async def test_post_api_crud_search_view_and_password_verify(monkeypatch: pytest
     async with session_factory() as session:
         assert await session.get(Post, post_id) is None
     await engine.dispose()
+
+
+def test_post_list_openapi_exposes_tag_id_filter() -> None:
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+    parameters = app.openapi()["paths"]["/api/v1/boards/{board_id}/posts"]["get"]["parameters"]
+
+    assert any(parameter["name"] == "tagId" and parameter["in"] == "query" for parameter in parameters)
 
 
 @pytest.mark.asyncio
